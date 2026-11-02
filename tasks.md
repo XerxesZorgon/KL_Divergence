@@ -456,7 +456,7 @@ Add `include("test_diagnostics.jl")` to `test/runtests.jl`. Stage with `git add 
 ---
 
 ## Task 011: Cover multiplicative update as a cross-check (T-E1-3)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02)
 **Milestone:** M1
 **Depends on:** 010
 
@@ -495,3 +495,51 @@ Add `include("test_crosscheck.jl")` to `test/runtests.jl`. Stage with `git add -
 
 ### On Failure
 `TASK 011 FAILED — [which of 1–3] — [failing test, case index, expected vs got (for (b): k and it)] — [error text]`
+
+**Result:** crosscheck (T-E1-3) testset 3 004 Pass, stall case reproduced.
+
+---
+
+## Task 012: Move the E1 experiment into experiments/ and call the package (CSV byte-identical)
+**Status:** [ ] Pending
+**Milestone:** M1
+**Depends on:** 011
+
+### What to do
+In `code/`: `git mv e1_kl_growth_loss.jl experiments/e1_kl_growth_loss.jl` and `git rm e1_results.csv` (the output now
+lives in the git-ignored `experiments/output/`). Edit `experiments/e1_kl_growth_loss.jl` as follows — **change nothing else**
+(header comment may gain one line: "Refactored in Task 012 to call Kelly_KL; outputs byte-identical to tag e1-original"):
+1. Replace the line `using Random, Printf, LinearAlgebra` with `using Random, Printf, LinearAlgebra` + `using Kelly_KL`.
+2. Delete the local definitions of `log_optimal` (and its docstring/comment block), `kelly_exact`, `kkt_residual`,
+   `optimal_allocation`, `returns_matrix`, `growth` and `kl`.
+3. Add, in their place, exactly:
+   ```julia
+   # E1's published `kkt` column uses only the first KKT term; the package certifies the full residual.
+   e1_kkt(X, a, q) = maximum(X' * (q ./ (X * a))) - 1.0
+   e1_alloc(q, ohat; cash::Bool) = Kelly_KL.optimal_allocation(q, ohat; cash).a
+   ```
+4. In `run_trial` and `stress`: `X = returns_matrix(ohat; cash)` → `X = single_event(p, ohat; cash).X`
+   (in `stress`: `X = single_event(p, ohat; cash=true).X`); each `ap, kp = optimal_allocation(p, ohat; cash…)` →
+   `ap = e1_alloc(p, ohat; cash…); kp = e1_kkt(X, ap, p)` and likewise for `aq, kq` with `q`. `growth` and `kl` now come
+   from the package (same expressions).
+5. In `main`, default `out = joinpath(@__DIR__, "output", "e1_results.csv")` and call `mkpath(dirname(out))` before writing.
+Run from `code/` in **cmd** so redirection writes raw bytes:
+`cmd /c "julia --project=. experiments\e1_kl_growth_loss.jl > experiments\output\e1_stdout.txt"`
+(create `experiments\output` first if needed). Stage with `git add -A` and commit with message
+`refactor(e1): experiment calls Kelly_KL; outputs byte-identical`.
+
+### Files touched
+- `code/experiments/e1_kl_growth_loss.jl` — moved + edited (one concern: E1 main experiment)
+- `code/e1_results.csv` — removed from the repository (now generated under `experiments/output/`)
+
+### Acceptance Criterion
+1. The run above exits 0;
+2. `git diff --no-index --exit-code test/golden/e1_results.csv experiments/output/e1_results.csv` exits 0 (byte-identical);
+3. `git diff --no-index --exit-code -I "^wrote " test/golden/e1_summary_julia-1.12.1.txt experiments/output/e1_stdout.txt`
+   exits 0 (stdout identical except the `wrote <path>` line);
+4. `git log --oneline --follow experiments/e1_kl_growth_loss.jl` shows ≥ 2 commits (history kept);
+5. `julia --project=. -e "using Pkg; Pkg.test()"` still exits 0 with `Testing Kelly_KL tests passed`;
+6. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 012 FAILED — [which of 1–6] — [first differing line from the git diff, or error] — [error text]`

@@ -40,8 +40,9 @@ function marker(io, shape, x, y, color; r=4.0)
     end
 end
 
-function main(; csv=joinpath(@__DIR__, "e1_results.csv"),
-               out=joinpath(@__DIR__, "..", "img", "e1_kl_growth_loss.svg"),
+function main(; csv=joinpath(@__DIR__, "output", "e1_results.csv"),
+               out=joinpath(@__DIR__, "output", "e1_kl_growth_loss.svg"),
+               article=joinpath(@__DIR__, "..", "..", "img", "e1_kl_growth_loss.svg"),
                per_group=500, seed=1)
     rows = filter(r -> r[2] > 1e-6, read_results(csv))
     rng = Xoshiro(seed)
@@ -99,6 +100,7 @@ function main(; csv=joinpath(@__DIR__, "e1_results.csv"),
         end
         println(io, "</svg>")
     end
+    mkpath(dirname(article)); cp(out, article; force = true)
     println("wrote $out")
 end
 
