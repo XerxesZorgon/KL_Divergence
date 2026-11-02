@@ -169,7 +169,7 @@ Gate: full `Pkg.test()` green incl. Aqua, T-ORC-1 (greedy), T-ORC-2, T-E1-1, T-E
 ---
 
 ## Task 005: Test harness and Aqua
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02)
 **Milestone:** M1
 **Depends on:** 004
 
@@ -197,3 +197,55 @@ verbatim; do not disable further checks. Stage with `git add -A` and commit with
 `TASK 005 FAILED — [which of 1–3] — [failing Aqua sub-test name and message] — [error text]`
 
 ---
+
+**Result:** 10 Aqua checks pass (stale_deps deferred to M8); top-level testset set to verbose.
+
+---
+
+## Task 006: Scenario model, single-event constructor, payoffs, growth
+**Status:** [ ] Pending
+**Milestone:** M1
+**Depends on:** 005
+
+### What to do
+Create `code/src/model.jl` and `include("model.jl")` it from `src/Kelly_KL.jl`; export `ScenarioModel`,
+`single_event`, `payoffs_from_odds`, `growth`. Implement exactly:
+- `struct ScenarioModel` with fields `π::Vector{Float64}`, `X::Matrix{Float64}`, `assets::Vector{String}`,
+  `has_cash::Bool`, `structure::Symbol` (DESIGN §3.1), constructed via
+  `ScenarioModel(π, X; assets, has_cash, structure)` which validates, in order, and throws on the first failure:
+  (1) `size(X,1) == length(π) ≥ 1` and `size(X,2) == length(assets) ≥ 1`, assets unique → `ArgumentError`;
+  (2) all `π_s ≥ 0` and `abs(sum(π) - 1) ≤ 1e-12` → `ArgumentError`; **π is stored exactly as given (no
+  renormalization)** so results stay bit-identical to E1;
+  (3) all `X` entries finite and `≥ 0` → `ArgumentError`;
+  (4) `has_cash` ⇒ `X[:,1] == ones(S)` and `assets[1] == "cash"` → `ArgumentError`;
+  (5) `structure ∈ (:single_event, :simultaneous, :correlated, :sampled, :mixture)` → `ArgumentError`;
+  (6) feasibility: every row `s` with `π_s > 0` has at least one positive entry → `DomainError`.
+  Every message names the failing rule and the offending index.
+- `single_event(q, ohat; cash = true)`: validates `length(q) == length(ohat)`, `ohat` finite and `> 0`;
+  `X = cash ? hcat(ones(n), Matrix(Diagonal(ohat))) : Matrix(Diagonal(ohat))` (this exact expression, as in
+  E1's `returns_matrix`); assets `["cash"; "outcome_1", …, "outcome_n"]` (no `"cash"` when `cash = false`);
+  `structure = :single_event`.
+- `payoffs_from_odds(o; commission = 0.0) = 1.0 .+ (o .- 1.0) .* (1 - commission)` (this exact expression);
+  validates `o` finite and `> 0`, `0 ≤ commission < 1`.
+- `growth(X, a, π) = sum(π .* log.(X * a))` (this exact expression) and `growth(m::ScenarioModel, a) = growth(m.X, a, m.π)`.
+In `docs/DESIGN.md` §3.1 rule 2, replace "(then renormalized exactly)" with
+"(stored as given, not renormalized — keeps E1 bit-identical; Task 006)".
+Create `code/test/test_model.jl` with `@testset "model"` covering: one valid construction; each of rules
+1–6 throwing the stated exception type; `single_event` X equal (`==`) to the E1 expression for
+`cash = true` and `cash = false`; `payoffs_from_odds([2.0, 3.5]; commission = 0.05) ≈ [1.95, 3.375]`
+(atol 1e-15); `growth([1.0 2.0; 1.0 0.0], [0.5, 0.5], [0.5, 0.5]) ≈ -0.14384103622589045` (atol 1e-15).
+Add `include("test_model.jl")` to `test/runtests.jl`. Stage with `git add -A` and commit with message
+`feat(model): ScenarioModel, single_event, payoffs_from_odds, growth`.
+
+### Files touched
+- `code/src/model.jl` — new; `code/src/Kelly_KL.jl` — include + exports (one concern: data model)
+- `code/test/test_model.jl` — new; `code/test/runtests.jl` — include line
+- `code/docs/DESIGN.md` — §3.1 rule 2 wording
+
+### Acceptance Criterion
+1. `julia --project=. -e "using Pkg; Pkg.test()"` exits 0 with `Testing Kelly_KL tests passed`;
+2. the summary shows testset `model` with ≥ 10 Pass, 0 Fail, 0 Error, and `Aqua (T-AQ-1)` still 0 Fail;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 006 FAILED — [which of 1–3] — [failing test name, expected vs got] — [error text]`

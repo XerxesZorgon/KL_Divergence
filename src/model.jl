@@ -118,3 +118,4 @@ end
 
 growth(X, a, π) = sum(π .* log.(X * a))
 growth(m::ScenarioModel, a) = growth(m.X, a, m.π)
+

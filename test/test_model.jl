@@ -97,3 +97,4 @@ using LinearAlgebra
     @test growth(X_g, a_g, π_g) ≈ -0.14384103622589045 atol = 1e-15
     @test growth(m_g, a_g) ≈ -0.14384103622589045 atol = 1e-15
 end
+
