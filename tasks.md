@@ -120,7 +120,7 @@ If the resolver cannot use a listed version on Julia 1.12.1, accept the version 
 `package: requested → resolved (reason)` in a new block under the Dependency Lock table in
 `docs/PLAN.md` titled `Resolver changes (Task 004)`; write `none` if there were no changes.
 Create the minimal module file `code/src/Kelly_KL.jl` containing only `module Kelly_KL` / `end` so the
-package loads. Commit with message `build: Project.toml and pinned Manifest`.
+package loads. Stage everything with `git add -A` (this includes the updated `tasks.md`; do not revert it) and commit with message `build: Project.toml and pinned Manifest`.
 (All `julia -e` commands in this file avoid inner quotes so they work in cmd.exe and PowerShell.)
 
 ### Files touched
