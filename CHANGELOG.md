@@ -16,10 +16,19 @@ completed task (AGENTS.md Part 7).
 - Task 010: `kl`
 - Task 011: `cover_update` cross-check (T-E1-3)
 - Task 014: E1 regression tests T-E1-1, T-E1-2
+- Task 016: `simultaneous_bets`, `correlated_bets`
+- Task 017: exponential-cone solver `solve_conic` (Clarabel; SCS by keyword)
+- Task 018: Newton polish on the active set
+- Task 019: `optimal_allocation` general path (conic + polish + certify) and `method = :auto | :conic`
+- Task 020: oracle tests T-ORC-1 (conic), T-ORC-8, T-ERR-2
+- Task 021: oracle tests T-ORC-3 (L ≤ D beyond single events), T-ORC-5
 
 ### Changed
 - Tasks 012–013, 015: E1 experiment, plot and results moved to `experiments/` and refactored to call Kelly_KL; outputs byte-identical to `e1-original`
 - Task 014: T-E1-1 no longer tests the L/D ratio (ill-conditioned for tiny D)
+
+### Fixed
+- Task 021: polish no longer zeroes a weight needed for feasibility, and drops a weight a Newton step would push below zero (ratio test) instead of stalling
 
 ### Existing before this changelog
 - E1 experiment (standard library only, Julia 1.13.3 Linux): `e1_kl_growth_loss.jl`, `e1_plot.jl`,

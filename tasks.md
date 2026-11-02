@@ -1041,3 +1041,71 @@ Add `include("test_general.jl")` to `test/runtests.jl`. Stage with `git add -A` 
 
 ### On Failure
 `TASK 021 FAILED — [which of 1–4] — [test ID, seed, case index, L and D or kkt, or SolverError status] — [error text]`
+
+**Attempt 1 (2026-11-02): FAILED** — T-ORC-3 (simultaneous), seed 901, case 14: `pinv` threw
+`ArgumentError: invalid argument #4 to LAPACK call` inside `polish_log_optimal`. Real bug in Task 018's polish
+(not a test-spec error): (1) thresholding the conic start at `act_tol = 1e-6` zeroed a genuinely needed cash weight
+(9.0e-7; the optimum is 8.8e-7), so some V_s = 0 and g, H became Inf/NaN; (2) found while reproducing: when a
+weight heads to zero, backtracking for positivity shrinks every step geometrically, so Newton stalls with weights
+like 1e-20 still "active" (2 of 2 000 extreme-belief prototype cases, ρ up to 0.11).
+Fix, prototyped 2026-11-02 (Julia 1.13, Python Clarabel starts): (1) keep the thresholded start only if it is
+feasible, else use the raw start (or a 0.1% uniform mix); (2) a ratio test drops the first weight a full Newton step
+would push to ≤ 0 instead of shrinking the step. Result on 4 700 prototype problems (earlier 700 + 2 000 extreme-belief
+simultaneous + 2 000 extreme-belief correlated): 0 failures, worst KKT 7.5e-12; the failing case now gives
+ρ = 2.9e-14 with cash 8.77e-7.
+
+### Fix 021a
+Replace the whole of `polish_log_optimal` in `code/src/polish.jl` with exactly:
+```julia
+function polish_log_optimal(X, π, a0; act_tol = 1e-6, newton_max = 50, outer_max = 10, step_tol = 1e-15, add_tol = 1e-12, tol = CERT_TOL)
+    pos = findall(>(0.0), π); Xp = X[pos, :]; πp = π[pos]
+    a = [x < act_tol ? 0.0 : x for x in a0]; a ./= sum(a)
+    if any(<=(0.0), Xp * a)                    # thresholding removed a weight that keeps some V_s > 0
+        a = max.(collect(Float64, a0), 0.0); a ./= sum(a)
+        any(<=(0.0), Xp * a) && (a = 0.999 .* a .+ 0.001 / length(a))   # uniform mix is feasible (model rule 6)
+    end
+    for _ in 1:outer_max
+        for _ in 1:newton_max
+            A = findall(>(0.0), a); k = length(A)
+            V = Xp * a; XA = Xp[:, A]
+            g = XA' * (πp ./ V)
+            H = -(XA' * (XA .* (πp ./ V .^ 2)))
+            K = [H ones(k); ones(1, k) 0.0]
+            d = (pinv(K) * vcat(-g, 0.0))[1:k]
+            tmax, iblk = 1.0, 0                       # ratio test: first weight the full step would push to ≤ 0
+            for i in 1:k
+                if d[i] < 0 && a[A[i]] + d[i] ≤ 0.0
+                    ti = a[A[i]] / -d[i]
+                    ti < tmax && ((tmax, iblk) = (ti, i))
+                end
+            end
+            t = tmax; drop = iblk > 0
+            while t ≥ 1e-12
+                an = copy(a); an[A] .+= t .* d
+                drop && (an[A[iblk]] = 0.0)
+                all(≥(0.0), an) && all(>(0.0), Xp * an) && break
+                t /= 2; drop = false                  # shorter step: keep the blocking weight
+            end
+            t < 1e-12 && break                        # no feasible progress; the outer loop decides
+            a[A] .+= t .* d
+            drop && (a[A[iblk]] = 0.0)
+            a .= max.(a, 0.0); a ./= sum(a)
+            !drop && maximum(abs, t .* d) < step_tol && break
+        end
+        V = Xp * a; r = Xp' * (πp ./ V)
+        add = [j for j in eachindex(a) if a[j] == 0.0 && r[j] > 1 + add_tol]
+        isempty(add) && kkt_residual(X, a, π) ≤ tol && break
+        for j in add; a[j] = 1e-8; end
+        a ./= sum(a)
+    end
+    return a, kkt_residual(X, a, π)
+end
+```
+In `code/test/test_polish.jl` add part (d), the regression case: `pb = [0.99, 0.99, 0.16488926145448488, 0.99, 0.6568450548562222]`,
+`w = [1.6638977752618886, 7.705939380077611, 1.0403264815888114, 2.09348899942351, 2.5594619949577773]`,
+`m = simultaneous_bets(pb, w)`, `a0 = [9.033673338264071e-7, 0.00038533495305392433, 0.986357007716434, 1.5860291618815984e-9, 0.013163583188946002, 9.316918820305283e-5]`;
+`(a, ρ) = polish_log_optimal(m.X, m.π, a0)`; `@test ρ ≤ 1e-10`; `@test a[1] > 0` (the needed cash weight survives).
+Rerun the reference suite (full mode). If it passes, stage with `git add -A` and commit with message
+`fix(polish): feasible start and ratio-test drop; T-ORC-3, T-ORC-5`.
+Acceptance: as Task 021 (testset `general models (T-ORC-3, T-ORC-5)` ≥ 7 000 Pass, 0 Fail, 0 Error; report its wall time),
+plus testset `polish` ≥ 502 Pass, 0 Fail; every other testset 0 Fail / 0 Error / 0 Broken.
