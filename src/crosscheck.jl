@@ -21,3 +21,4 @@ function cover_update(X::AbstractMatrix, π::AbstractVector; tol=1e-11, maxiter=
     end
     return a, kkt, it
 end
+

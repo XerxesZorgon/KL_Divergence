@@ -37,3 +37,4 @@ using Kelly_KL: greedy_allocation, cover_update
     @test it == 2_000_000
     @test kkt_residual(X, greedy_allocation(q, ohat), q) ≤ 1e-10
 end
+

@@ -25,93 +25,14 @@
 #
 # Outputs:  e1_results.csv (one row per trial) and a printed summary.
 # Plot with e1_plot.jl.
+# Refactored in Task 012 to call Kelly_KL; outputs byte-identical to tag e1-original
 
 using Random, Printf, LinearAlgebra
+using Kelly_KL
 
-# ---------------------------------------------------------------------------------------
-# Cross-check solver (not used for the main results — it stalls when a weight underflows
-# to zero, so `optimal_allocation` below uses the exact solution instead).
-# Log-optimal allocation via Cover's multiplicative update (Cover 1984, "An algorithm for
-# maximizing expected log investment return").  For returns matrix X (outcomes × assets)
-# and weights a on the simplex, the update a_j ← a_j · Σ_i q_i X_ij / (X a)_i keeps a on
-# the simplex and increases G_q monotonically.  Optimality (KKT): r_j = Σ_i q_i X_ij/(X a)_i
-# satisfies r_j ≤ 1 for all j, with equality where a_j > 0.  We stop when max_j r_j − 1 < tol.
-# ---------------------------------------------------------------------------------------
-"""
-    log_optimal(X, q; tol=1e-11, maxiter=2_000_000) -> (a, kkt, iters)
-
-Maximize Σ_i q_i log((X a)_i) over the probability simplex.
-"""
-function log_optimal(X::AbstractMatrix, q::AbstractVector; tol=1e-11, maxiter=2_000_000)
-    nA = size(X, 2)
-    a = fill(1.0 / nA, nA)
-    r = similar(a)
-    kkt = Inf
-    it = 0
-    for k in 1:maxiter
-        it = k
-        V = X * a
-        r .= X' * (q ./ V)
-        kkt = maximum(r) - 1.0
-        kkt < tol && break
-        a .*= r
-        a ./= sum(a)              # guards against round-off drift
-    end
-    return a, kkt, it
-end
-
-"""
-    kelly_exact(q, ohat) -> a = [cash; stakes]
-
-Exact log-optimal allocation for mutually exclusive outcomes with cash available
-(Kelly 1956; Smoczynski & Tomkins 2010, "An explicit solution to the problem of
-optimizing the allocations of a bettor's wealth when wagering on horse races").
-Sort outcomes by expected return e_i = q_i ô_i.  Grow the bet set S greedily while
-e_i > R(S), where the reserve rate is
-    R(S) = (1 − Σ_{i∈S} q_i) / (1 − Σ_{i∈S} 1/ô_i).
-Then stake f_i = q_i − R/ô_i on i ∈ S and keep 1 − Σ f_i in cash.
-"""
-function kelly_exact(q::AbstractVector, ohat::AbstractVector)
-    n = length(q)
-    order = sortperm(q .* ohat; rev=true)
-    S = Int[]; pS = 0.0; σS = 0.0; R = 1.0
-    for i in order
-        q[i] * ohat[i] > R || break
-        push!(S, i); pS += q[i]; σS += 1 / ohat[i]
-        R = (pS >= 1 - 1e-15 || σS >= 1) ? 0.0 : (1 - pS) / (1 - σS)
-    end
-    f = zeros(n)
-    for i in S
-        f[i] = max(q[i] - R / ohat[i], 0.0)
-    end
-    return vcat(max(1 - sum(f), 0.0), f)
-end
-
-"""KKT residual max_j (r_j − 1), r = Xᵀ(q ./ Xa); ≤ 0 (to round-off) at the optimum."""
-kkt_residual(X, a, q) = maximum(X' * (q ./ (X * a))) - 1.0
-
-"""
-    optimal_allocation(q, ohat; cash) -> (a, kkt)
-
-No cash: a = q exactly for any payoffs (Cover & Thomas Thm 6.1.2).
-Cash:    exact greedy solution `kelly_exact`.
-Both are checked against the KKT conditions of the log-optimal problem.
-"""
-function optimal_allocation(q, ohat; cash::Bool)
-    X = returns_matrix(ohat; cash)
-    a = cash ? kelly_exact(q, ohat) : copy(q)
-    return a, kkt_residual(X, a, q)
-end
-
-"""Returns matrix: rows = outcomes, columns = [cash (optional); stake on each outcome]."""
-function returns_matrix(ohat::AbstractVector; cash::Bool)
-    n = length(ohat)
-    S = Matrix(Diagonal(ohat))
-    return cash ? hcat(ones(n), S) : S
-end
-
-growth(X, a, p) = sum(p .* log.(X * a))
-kl(p, q) = sum(p[i] > 0 ? p[i] * log(p[i] / q[i]) : 0.0 for i in eachindex(p))
+# E1's published `kkt` column uses only the first KKT term; the package certifies the full residual.
+e1_kkt(X, a, q) = maximum(X' * (q ./ (X * a))) - 1.0
+e1_alloc(q, ohat; cash::Bool) = Kelly_KL.optimal_allocation(q, ohat; cash).a
 
 dirichlet1(rng, n) = (x = randexp(rng, n); x ./ sum(x))
 tilt(rng, p, σ) = (x = p .* exp.(σ .* randn(rng, length(p))); x ./ sum(x))
@@ -138,9 +59,9 @@ function run_trial(rng, case; n, σ, τ=0.3)
                  error("unknown case $case")
     o = 1.0 ./ (m .* (1 + ρ))
     ohat = 1.0 .+ (o .- 1.0) .* (1 - c)
-    X = returns_matrix(ohat; cash)
-    ap, kp = optimal_allocation(p, ohat; cash)
-    aq, kq = optimal_allocation(q, ohat; cash)
+    X = single_event(p, ohat; cash).X
+    ap = e1_alloc(p, ohat; cash); kp = e1_kkt(X, ap, p)
+    aq = e1_alloc(q, ohat; cash); kq = e1_kkt(X, aq, q)
     Gopt, Gq = growth(X, ap, p), growth(X, aq, p)
     Trial(case, n, σ, ρ, c, kl(p, q), Gopt - Gq, Gopt, Gq,
           cash ? ap[1] : 0.0, cash ? aq[1] : 0.0, max(kp, kq))
@@ -148,7 +69,7 @@ end
 
 function main(; seed=20261101, trials_per_cell=200,
                σs=(0.05, 0.1, 0.2, 0.4, 0.8), ns=(3, 4, 6),
-               out=joinpath(@__DIR__, "e1_results.csv"))
+               out=joinpath(@__DIR__, "output", "e1_results.csv"))
     rng = Xoshiro(seed)
     cases = ("A_full_investment", "A2_full_inv_fees", "B_cash", "B2_cash_margin",
              "C_cash_margin_fee", "D_cash_superfair")
@@ -157,6 +78,7 @@ function main(; seed=20261101, trials_per_cell=200,
         push!(rows, run_trial(rng, case; n, σ))
     end
 
+    mkpath(dirname(out))
     open(out, "w") do io
         println(io, "case,n,sigma,overround,commission,kl,loss,Gp_opt,Gp_q,cash_p,cash_q,kkt")
         for t in rows
@@ -197,9 +119,9 @@ function stress(; seed=7, trials=50_000)
         n = rand(rng, 2:12); σ = 2rand(rng); τ = 1.5rand(rng); ρ = 0.3rand(rng); c = 0.2rand(rng)
         p = dirichlet1(rng, n); m = tilt(rng, p, τ); q = tilt(rng, p, σ)
         ohat = 1.0 .+ (1.0 ./ (m .* (1 + ρ)) .- 1.0) .* (1 - c)
-        X = returns_matrix(ohat; cash=true)
-        ap, kp = optimal_allocation(p, ohat; cash=true)
-        aq, kq = optimal_allocation(q, ohat; cash=true)
+        X = single_event(p, ohat; cash=true).X
+        ap = e1_alloc(p, ohat; cash=true); kp = e1_kkt(X, ap, p)
+        aq = e1_alloc(q, ohat; cash=true); kq = e1_kkt(X, aq, q)
         L = growth(X, ap, p) - growth(X, aq, p); D = kl(p, q)
         viol += L > D + 1e-10
         worst = max(worst, L / D); kmax = max(kmax, kp, kq)

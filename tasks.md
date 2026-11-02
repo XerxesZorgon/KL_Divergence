@@ -422,7 +422,7 @@ Add `include("test_optimize.jl")` to `test/runtests.jl`. Stage with `git add -A`
 ---
 
 ## Task 010: KL divergence
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02)
 **Milestone:** M1
 **Depends on:** 009
 
@@ -450,3 +450,48 @@ Add `include("test_diagnostics.jl")` to `test/runtests.jl`. Stage with `git add 
 
 ### On Failure
 `TASK 010 FAILED — [which of 1–3] — [failing test, expected vs got] — [error text]`
+
+**Result:** diagnostics: kl testset 2 005 Pass.
+
+---
+
+## Task 011: Cover multiplicative update as a cross-check (T-E1-3)
+**Status:** [ ] Pending
+**Milestone:** M1
+**Depends on:** 010
+
+### What to do
+Create `code/src/crosscheck.jl`, include it from `src/Kelly_KL.jl` after `diagnostics.jl` (not exported; internal
+`Kelly_KL.cover_update`). Implement `cover_update(X, π; tol = 1e-11, maxiter = 2_000_000) -> (a, kkt, iters)` whose
+body is a **verbatim port** of E1's `log_optimal` (start `a = fill(1.0 / nA, nA)`; loop: `V = X * a`,
+`r .= X' * (π ./ V)`, `kkt = maximum(r) - 1.0`, break if `kkt < tol`, `a .*= r`, `a ./= sum(a)`). Docstring: Cover (1984);
+cross-check only, never used for returned results; it stalls when a weight underflows to 0 (see test).
+Create `code/test/test_crosscheck.jl` with `@testset "crosscheck (T-E1-3)"`:
+(a) **Agreement on non-degenerate events**, `rng = StableRNG(401)`: repeat (at most 100 000 tries) until 1 000 cases
+are accepted: `n = rand(rng, 2:6)`; `q` = normalized `randexp(rng, n)`; `m_` = normalized `q .* exp.(0.5 .* randn(rng, n))`;
+`ohat = 1.0 ./ (m_ .* (1 + 0.1 * rand(rng)))`; `X = single_event(q, ohat).X`; `g = greedy_allocation(q, ohat)`;
+`r = X' * (q ./ (X * g))`; accept only if strict complementarity holds: every `g_j > 1e-12` also has `g_j > 1e-3`, and
+every `g_j ≤ 1e-12` has `r_j < 1 - 1e-3`. For each accepted case `(ac, kc, itc) = cover_update(X, q; tol = 1e-14)`;
+`@test kc < 1e-14`, `@test itc < 2_000_000`, `@test maximum(abs.(ac .- g)) ≤ 1e-8`. After the loop `@test accepted == 1000`.
+(Prototype on 2026-11-02, Julia 1.13 / Xoshiro: worst agreement 3.4e-11, ≤ 59 189 iterations, 0.4 s total. The default
+tol = 1e-11 gives only ~3e-8 agreement — that is why the test uses 1e-14.)
+(b) **Recorded stall case** (E1 stress, seed 7, trial 17 107):
+`q = [0.00020838121287119872, 1.1209261096267569e-5, 0.0005783775956495249, 3.371889426870182e-5, 0.9665317526828919, 4.267801849974459e-7, 0.030729606897642796, 6.818056191985896e-7, 0.0019058448697754468]`,
+`ohat = [5.643849259957775, 76.48229011241091, 19.753496285271467, 19.936675832894974, 2.6187380177308954, 80.02336032728618, 8.745265092155345, 3.148397861287974, 7.223847829808504]`,
+`X = hcat(ones(9), Matrix(Diagonal(ohat)))`; `(a, k, it) = cover_update(X, q)` (defaults): `@test k > 1e-3` and
+`@test it == 2_000_000` (expected k ≈ 1.29 — the cross-check is not trusted); and
+`@test kkt_residual(X, greedy_allocation(q, ohat), q) ≤ 1e-10` (the exact solver handles the same case).
+Add `include("test_crosscheck.jl")` to `test/runtests.jl`. Stage with `git add -A` and commit with message
+`feat(crosscheck): cover_update with T-E1-3`.
+
+### Files touched
+- `code/src/crosscheck.jl` — new; `code/src/Kelly_KL.jl` — include (one concern: cross-check solver)
+- `code/test/test_crosscheck.jl` — new; `code/test/runtests.jl` — include line
+
+### Acceptance Criterion
+1. `julia --project=. -e "using Pkg; Pkg.test()"` exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `crosscheck (T-E1-3)` shows ≥ 3 004 Pass, 0 Fail, 0 Error; all earlier testsets still 0 Fail;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 011 FAILED — [which of 1–3] — [failing test, case index, expected vs got (for (b): k and it)] — [error text]`
