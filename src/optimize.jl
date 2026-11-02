@@ -12,23 +12,29 @@ function single_event_inputs(m::ScenarioModel)
 end
 
 """
-    optimal_allocation(m::ScenarioModel; solver = :clarabel, tol = CERT_TOL) -> BetResult
-    optimal_allocation(q, ohat; cash::Bool = true, tol = CERT_TOL) -> BetResult
+    optimal_allocation(m::ScenarioModel; method::Symbol = :auto, solver::Symbol = :clarabel, tol = CERT_TOL) -> BetResult
+    optimal_allocation(q, ohat; cash::Bool = true, method::Symbol = :auto, solver::Symbol = :clarabel, tol = CERT_TOL) -> BetResult
 
-Compute and certify the log-optimal allocation for `m`.
-For `:single_event` models, exact closed-form paths (`:greedy` with cash, `:full_investment` without cash)
-are used; `solver` is accepted and ignored on these exact paths.
+Compute and certify the log-optimal allocation for `m`; every returned bet is certified (KKT ≤ tol).
+Dispatch rules:
+- `method = :auto` (default) on `:single_event` uses the exact closed-form paths (`:greedy` with cash, `:full_investment` without cash; `solver` is ignored).
+- Any other `m.structure`, or `method = :conic`, solves the exponential-cone program via `solver ∈ (:clarabel, :scs)`, polishes on the active set, and certifies with `result.method == solver`.
 """
-function optimal_allocation(m::ScenarioModel; solver = :clarabel, tol = CERT_TOL)
-    m.structure == :single_event || throw(ArgumentError("structure :$(m.structure) requires the conic path (milestone M2)"))
-    q, ohat = single_event_inputs(m)
-    if m.has_cash
-        return certify(BetResult(m, greedy_allocation(q, ohat), :greedy); tol = tol)
+function optimal_allocation(m::ScenarioModel; method::Symbol = :auto, solver::Symbol = :clarabel, tol = CERT_TOL)
+    method in (:auto, :conic) || throw(ArgumentError("method must be :auto or :conic, got :$method"))
+    if method === :auto && m.structure === :single_event
+        q, ohat = single_event_inputs(m)
+        if m.has_cash
+            return certify(BetResult(m, greedy_allocation(q, ohat), :greedy); tol = tol)
+        end
+        length(q) == length(m.π) || throw(ArgumentError("single_event without cash requires length(bets)=$(length(q)) == length(π)=$(length(m.π)) (column 1)"))
+        return certify(BetResult(m, full_investment_allocation(q), :full_investment); tol = tol)
     end
-    length(q) == length(m.π) || throw(ArgumentError("single_event without cash requires length(bets)=$(length(q)) == length(π)=$(length(m.π)) (column 1)"))
-    return certify(BetResult(m, full_investment_allocation(q), :full_investment); tol = tol)
+    a_raw = solve_conic(m; solver = solver)
+    a, _ = polish_log_optimal(m.X, m.π, a_raw; tol = tol)
+    return certify(BetResult(m, a, solver); tol = tol)
 end
 
-optimal_allocation(q, ohat; cash::Bool = true, tol = CERT_TOL) =
-    optimal_allocation(single_event(q, ohat; cash = cash); tol = tol)
+optimal_allocation(q, ohat; cash::Bool = true, method::Symbol = :auto, solver::Symbol = :clarabel, tol = CERT_TOL) =
+    optimal_allocation(single_event(q, ohat; cash = cash); method = method, solver = solver, tol = tol)
 

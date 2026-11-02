@@ -35,3 +35,4 @@ function polish_log_optimal(X, π, a0; act_tol = 1e-6, newton_max = 50, outer_ma
     end
     return a, kkt_residual(X, a, π)
 end
+

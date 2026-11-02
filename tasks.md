@@ -756,7 +756,7 @@ task text; the intent (no `RESERVE_TOL` in code or tests) is met. Later grep cri
 ---
 
 ## Task 017: Conic log-optimal solver (JuMP + Clarabel; SCS by keyword)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02, after Fix 017a, commit 3230e88)
 **Milestone:** M2
 **Depends on:** 016
 
@@ -826,3 +826,80 @@ In `code/test/test_conic_raw.jl` part (a), replace the allocation assertion with
 `# allocation distance is ill-conditioned near marginal bets (seed 601, trial 25: 1.0e-4 apart, growth gap 4.6e-10)`.
 Leave (b)–(e) unchanged. Rerun the reference suite and commit as in Task 017.
 Acceptance: as Task 017, with testset `conic (raw)` ≥ 405 Pass, 0 Fail, 0 Error.
+
+**Result (Fix 017a):** conic (raw) 406 Pass; suite 25 767 Pass.
+
+---
+
+## Task 018: Newton polish on the active set
+**Status:** [ ] Pending
+**Milestone:** M2
+**Depends on:** 017
+
+### What to do
+Create `code/src/polish.jl` (internal), include it from `src/Kelly_KL.jl` after `conic.jl`. Implement exactly the following
+(DESIGN §5.4; prototyped 2026-11-02 in Julia 1.13 on 400 Clarabel solutions — simultaneous, correlated and single-event
+problems — worst KKT residual after polish 2.2e-13, 0 failures, 4.0 s including compilation). It never throws; it returns
+the polished allocation and its residual, and Task 019 certifies.
+```julia
+function polish_log_optimal(X, π, a0; act_tol = 1e-6, newton_max = 50, outer_max = 10, step_tol = 1e-15, add_tol = 1e-12, tol = CERT_TOL)
+    pos = findall(>(0.0), π); Xp = X[pos, :]; πp = π[pos]
+    a = [x < act_tol ? 0.0 : x for x in a0]; a ./= sum(a)
+    for _ in 1:outer_max
+        A = findall(>(0.0), a)
+        for _ in 1:newton_max
+            V = Xp * a; XA = Xp[:, A]
+            g = XA' * (πp ./ V)
+            H = -(XA' * (XA .* (πp ./ V .^ 2)))
+            k = length(A)
+            K = [H ones(k); ones(1, k) 0.0]
+            d = (pinv(K) * vcat(-g, 0.0))[1:k]
+            t = 1.0
+            accepted = false
+            while t ≥ 1e-12
+                an = copy(a); an[A] .+= t .* d
+                if all(>(0.0), an[A]) && all(>(0.0), Xp * an)
+                    accepted = true; break
+                end
+                t /= 2
+            end
+            if !accepted
+                ratios = [d[i] < 0 ? a[A[i]] / -d[i] : Inf for i in 1:k]
+                a[A[argmin(ratios)]] = 0.0; a ./= sum(a)
+                break
+            end
+            a[A] .+= t .* d
+            maximum(abs, t .* d) < step_tol && break
+        end
+        V = Xp * a; r = Xp' * (πp ./ V)
+        add = [j for j in eachindex(a) if a[j] == 0.0 && r[j] > 1 + add_tol]
+        isempty(add) && kkt_residual(X, a, π) ≤ tol && break
+        for j in add; a[j] = 1e-8; end
+        a ./= sum(a)
+    end
+    return a, kkt_residual(X, a, π)
+end
+```
+Create `code/test/test_polish.jl` with `@testset "polish"` (StableRNG; `using Kelly_KL: solve_conic, polish_log_optimal, greedy_allocation`):
+(a) seed 701, 150 simultaneous problems: `n = rand(rng, 2:6)`; `p = 0.05 .+ 0.85 .* rand(rng, n)`;
+`mk = clamp.(p .* exp.(0.3 .* randn(rng, n)), 0.02, 0.95)`; `w = 1 ./ (mk .* (1 + 0.05 * rand(rng)))`; `m = simultaneous_bets(p, w)`;
+`(a, ρ) = polish_log_optimal(m.X, m.π, solve_conic(m))`; `@test ρ ≤ 1e-10`;
+(b) seed 702, 150 correlated problems: `S = rand(rng, 4:64)`; `n = rand(rng, 2:11)`; `π` = normalized `randexp(rng, S)`;
+`W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]`; `m = correlated_bets(π, W)`; same assertion;
+(c) seed 703, 100 single events with cash (Task 008 seed-103 family): polish the conic solution and
+`@test maximum(abs.(a .- greedy_allocation(q, ohat))) ≤ 1e-10` and `@test ρ ≤ 1e-10`.
+Add `include("test_polish.jl")` to `test/runtests.jl`. Stage with `git add -A` and commit with message
+`feat(polish): Newton polish on the active set`.
+
+### Files touched
+- `code/src/polish.jl` — new; `code/src/Kelly_KL.jl` — include (one concern: polishing)
+- `code/test/test_polish.jl` — new; `code/test/runtests.jl` — include line
+
+### Acceptance Criterion
+1. Reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, then `julia --project=. -e "using Pkg; Pkg.test()"`)
+   exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `polish` shows ≥ 500 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 018 FAILED — [which of 1–3] — [part, seed, case index, ρ or allocation error] — [error text]`

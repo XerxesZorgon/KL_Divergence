@@ -40,3 +40,4 @@ using Kelly_KL: solve_conic, polish_log_optimal, greedy_allocation
         @test ρ ≤ 1e-10
     end
 end
+

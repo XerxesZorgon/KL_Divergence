@@ -39,8 +39,24 @@ using Kelly_KL: greedy_allocation
     @test res_c.method == :greedy
     assert_certified(res_c, m)
 
-    # (d) invalid structure or invalid single-event shape throws ArgumentError
-    @test_throws ArgumentError optimal_allocation(ScenarioModel([0.6, 0.4], [1.0 2.0; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :simultaneous))
+    res_conic = optimal_allocation(m; method = :conic)
+    @test res_conic.method == :clarabel
+    @test maximum(abs.(res_conic.a .- [0.8, 0.2])) ≤ 1e-10
+    assert_certified(res_conic, m)
+
+    # (d) conic + polish path on general models and invalid single-event shape checks
+    m_sim = ScenarioModel([0.6, 0.4], [1.0 2.0; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :simultaneous)
+    r_sim = optimal_allocation(m_sim)
+    @test r_sim.method == :clarabel
+    @test maximum(abs.(r_sim.a .- [0.8, 0.2])) ≤ 1e-10
+    assert_certified(r_sim, m_sim)
+
+    m_scs = simultaneous_bets([0.3, 0.25], [4.0, 6.0])
+    r_scs = optimal_allocation(m_scs; solver = :scs)
+    @test r_scs.method == :scs
+    assert_certified(r_scs, m_scs)
+
+    @test_throws ArgumentError optimal_allocation(m; method = :foo)
     @test_throws ArgumentError optimal_allocation(ScenarioModel([0.6, 0.4], [1.0 2.0; 1.0 1.5]; assets = ["cash", "bet"], has_cash = true, structure = :single_event))
     @test_throws ArgumentError optimal_allocation(ScenarioModel([0.6, 0.4], [1.0 2.0 3.0; 1.0 0.0 0.0]; assets = ["cash", "bet1", "bet2"], has_cash = true, structure = :single_event))
     @test_throws ArgumentError optimal_allocation(ScenarioModel([1.0, 0.0], reshape([2.0, 0.0], 2, 1); assets = ["bet1"], has_cash = false, structure = :single_event))
