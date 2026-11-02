@@ -7,6 +7,19 @@ completed task (AGENTS.md Part 7).
 ### Added
 - [Docs] Planning documents: `docs/SDD.md`, `docs/adr/ADR-001` … `ADR-011`, `docs/DESIGN.md`,
   `docs/TEST_PLAN.md`, `docs/PLAN.md`, `README.md`, `CHANGELOG.md` (2026-11-01).
+- Tasks 001–004: git repository, golden E1 outputs (tag `e1-original`), pinned environment (Julia 1.12.1)
+- Task 005: test harness and Aqua
+- Task 006: `ScenarioModel`, `single_event`, `payoffs_from_odds`, `growth`
+- Task 007: `BetResult`, `CertificationError`, `SolverError`, `kkt_residual`, `certify`
+- Task 008: exact full-investment and greedy allocations (T-ORC-1 greedy, T-ORC-2)
+- Task 009: certified `optimal_allocation` for single events
+- Task 010: `kl`
+- Task 011: `cover_update` cross-check (T-E1-3)
+- Task 014: E1 regression tests T-E1-1, T-E1-2
+
+### Changed
+- Tasks 012–013, 015: E1 experiment, plot and results moved to `experiments/` and refactored to call Kelly_KL; outputs byte-identical to `e1-original`
+- Task 014: T-E1-1 no longer tests the L/D ratio (ill-conditioned for tiny D)
 
 ### Existing before this changelog
 - E1 experiment (standard library only, Julia 1.13.3 Linux): `e1_kl_growth_loss.jl`, `e1_plot.jl`,

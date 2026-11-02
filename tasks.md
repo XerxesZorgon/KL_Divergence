@@ -594,7 +594,7 @@ Create `code/test/test_e1.jl` with `@testset "E1 (T-E1-1, T-E1-2)"`:
   and `module E1Plot; include(joinpath(@__DIR__, "..", "experiments", "e1_plot.jl")); end` (their
   `abspath(PROGRAM_FILE) == @__FILE__` guards keep them from auto-running).
 - **T-E1-1:** `viol, worst, kmax = E1Main.stress(; trials = QUICK ? 5_000 : 50_000)`; `@test viol == 0`;
-  `@test worst ≤ 1 + 1e-10`; `@test kmax ≤ 1e-10`.
+  `@test kmax ≤ 1e-10`. (No test on `worst = max L/D`: the ratio is ill-conditioned when D(p‖q) is tiny — see Fix 014a.)
 - **T-E1-2:** in `mktempdir()`, run `E1Main.main(; out = csv)` then
   `E1Plot.main(; csv, out = svg, article = joinpath(tmp, "article.svg"))` (never touch `../img/` from tests).
   Golden files: `test/golden/e1_results.csv`, `test/golden/e1_kl_growth_loss.svg`.
@@ -612,11 +612,23 @@ Stage with `git add -A` and commit with message `test(e1): T-E1-1 stress and T-E
 1. Reference run, from `code/` in cmd: `cmd /c "set KELLY_KL_REFERENCE_HOST=1&& julia --project=. -e "using Pkg; Pkg.test()""`
    — if the nested quotes fail, run the same two commands in one cmd session: `set KELLY_KL_REFERENCE_HOST=1` then
    `julia --project=. -e "using Pkg; Pkg.test()"` — exits 0 with `Testing Kelly_KL tests passed`, and testset
-   `E1 (T-E1-1, T-E1-2)` shows ≥ 5 Pass, 0 Fail, 0 Error, 0 Broken;
+   `E1 (T-E1-1, T-E1-2)` shows ≥ 4 Pass, 0 Fail, 0 Error, 0 Broken;
 2. Non-reference run (variable unset, new shell): `julia --project=. -e "using Pkg; Pkg.test()"` exits 0; testset
-   `E1 (T-E1-1, T-E1-2)` shows ≥ 4 Pass, 0 Fail, 0 Error and exactly 1 Broken (the skipped SVG check);
+   `E1 (T-E1-1, T-E1-2)` shows ≥ 3 Pass, 0 Fail, 0 Error and exactly 1 Broken (the skipped SVG check);
 3. all earlier testsets still 0 Fail in both runs;
 4. `git status --porcelain` prints nothing.
 
 ### On Failure
 `TASK 014 FAILED — [which of 1–4] — [failing test, first differing CSV line/field] — [error text]`
+
+**Attempt 1 (2026-11-02): FAILED** — `worst = 1.0000001342284202 > 1 + 1e-10` (seed 7, trial 22 420:
+D = 1.4485550812920307e-9, L − D = 1.94e-16). viol = 0, kmax = 4.09e-12, T-E1-2 byte identity passed.
+Root cause (spec error, not a code bug): the ratio L/D amplifies the ~1e-16 rounding error in L by 1/D. The
+absolute bound L ≤ D + 1e-10 is the meaningful check and passed. Fix 014a removes the ratio assertion and
+corrects TEST_PLAN T-E1-1; criteria above updated (≥ 4 / ≥ 3 Pass).
+
+### Fix 014a
+Delete the `@test worst ≤ 1 + 1e-10` line from `test/test_e1.jl` (keep `viol == 0` and `kmax ≤ 1e-10`; add the comment
+`# L/D not tested: ill-conditioned for tiny D (seed 7, trial 22 420: D = 1.45e-9 → ratio error 1.3e-7); L ≤ D + 1e-10 is the bound`).
+In `docs/TEST_PLAN.md` row T-E1-1, delete `max L/D ≤ 1 + 1e-10; ` and append
+` (L/D is not tested: ill-conditioned when D is tiny — Task 014)`. Then rerun both acceptance runs and commit as in Task 014.
