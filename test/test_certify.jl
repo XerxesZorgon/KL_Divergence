@@ -34,3 +34,4 @@
     # (g) assert_certified passes on optimal result
     assert_certified(res_opt, m)
 end
+

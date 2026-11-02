@@ -203,7 +203,7 @@ verbatim; do not disable further checks. Stage with `git add -A` and commit with
 ---
 
 ## Task 006: Scenario model, single-event constructor, payoffs, growth
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02)
 **Milestone:** M1
 **Depends on:** 005
 
@@ -249,3 +249,54 @@ Add `include("test_model.jl")` to `test/runtests.jl`. Stage with `git add -A` an
 
 ### On Failure
 `TASK 006 FAILED — [which of 1–3] — [failing test name, expected vs got] — [error text]`
+
+**Result:** model testset 27 Pass. Reviewed: E1-critical expressions (`single_event` X, `payoffs_from_odds`,
+`growth`) match E1 exactly. Validation code is loop-heavy — candidate for the post-M1 /refactor.
+
+---
+
+## Task 007: Results, errors, KKT residual, certification
+**Status:** [ ] Pending
+**Milestone:** M1
+**Depends on:** 006
+
+### What to do
+Create `code/src/certify.jl`, include it from `src/Kelly_KL.jl` after `model.jl`, and export `BetResult`,
+`CertificationError`, `SolverError`, `kkt_residual`, `certify`. Implement:
+- `struct BetResult` with fields `a`, `growth`, `kkt`, `method::Symbol`, `active::Vector{Int}`,
+  `assets::Vector{String}` (DESIGN §3.2), plus the convenience constructor
+  `BetResult(m::ScenarioModel, a, method; τ_a = 1e-12)` that fills `growth = growth(m, a)`,
+  `kkt = kkt_residual(m.X, a, m.π; τ_a)`, `active = findall(>(τ_a), a)`, `assets = m.assets`.
+- `struct CertificationError <: Exception` with fields `kkt`, `tol`, `method::Symbol`, `msg::String`, and
+  `struct SolverError <: Exception` with fields `status::String`, `msg::String`; both with `Base.showerror`.
+- `kkt_residual(X, a, π; τ_a = 1e-12)` = ρ(a) of DESIGN §5.2: with `V = X * a`, return `Inf` if any `V_s ≤ 0`
+  for `π_s > 0`; otherwise `r_j = Σ_{s: π_s > 0} π_s X_sj / V_s` and
+  `ρ = max(maximum(r .- 1), maximum(abs, r[a .> τ_a] .- 1; init = 0.0), max(0.0, -minimum(a)), abs(sum(a) - 1))`.
+- `certify(result::BetResult; tol = 1e-10)` returns `result` if `result.kkt ≤ tol`, else throws
+  `CertificationError(result.kkt, tol, result.method, "uncertified bet")`.
+Create `code/test/certify_hook.jl` defining `assert_certified(result::BetResult, m::ScenarioModel; tol = 1e-10)`
+which runs `@test result.kkt ≤ tol` and `@test kkt_residual(m.X, result.a, m.π) ≈ result.kkt atol = 1e-14`;
+include it in `test/runtests.jl` before the component test files. Create `code/test/test_certify.jl` with
+`@testset "certify"` using `X = [1.0 2.0; 1.0 0.0]`, `π = [0.6, 0.4]`:
+(a) `kkt_residual(X, [0.8, 0.2], π) ≤ 1e-15` (Kelly optimum b = 0.2);
+(b) `kkt_residual(X, [0.9, 0.1], π) ≥ 0.09`;
+(c) `kkt_residual(X, [1.1, -0.1], π) ≥ 0.1` (negativity term);
+(d) `kkt_residual(X, [0.7, 0.2], π) ≥ 0.1` (sum term);
+(e) `kkt_residual(X, [0.0, 1.0], π) == Inf`;
+(f) `certify` returns the result for `BetResult(m, [0.8, 0.2], :test)` and throws `CertificationError` for
+`BetResult(m, [0.9, 0.1], :test)`, where `m = ScenarioModel(π, X; assets = ["cash", "bet"], has_cash = true, structure = :single_event)`;
+(g) `assert_certified` passes on (f)'s optimal result.
+Add `include("test_certify.jl")` to `test/runtests.jl`. Stage with `git add -A` and commit with message
+`feat(certify): BetResult, errors, KKT residual, certify`.
+
+### Files touched
+- `code/src/certify.jl` — new; `code/src/Kelly_KL.jl` — include + exports (one concern: certification)
+- `code/test/certify_hook.jl`, `code/test/test_certify.jl` — new; `code/test/runtests.jl` — include lines
+
+### Acceptance Criterion
+1. `julia --project=. -e "using Pkg; Pkg.test()"` exits 0 with `Testing Kelly_KL tests passed`;
+2. the summary shows testset `certify` with ≥ 9 Pass, 0 Fail, 0 Error; `model` and `Aqua (T-AQ-1)` still 0 Fail;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 007 FAILED — [which of 1–3] — [failing test name, expected vs got] — [error text]`

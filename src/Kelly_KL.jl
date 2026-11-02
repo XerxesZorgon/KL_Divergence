@@ -7,5 +7,6 @@ export BetResult, CertificationError, SolverError, kkt_residual, certify
 
 include("model.jl")
 include("certify.jl")
+include("exact.jl")
 
 end

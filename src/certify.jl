@@ -70,3 +70,4 @@ function certify(result::BetResult; tol::Real = 1e-10)
     end
     throw(CertificationError(result.kkt, Float64(tol), result.method, "uncertified bet"))
 end
+
