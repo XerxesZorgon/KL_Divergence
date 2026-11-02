@@ -1,0 +1,9 @@
+experiments/output/
+python/.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.jl.cov
+*.jl.*.cov
+*.jl.mem
+LocalPreferences.toml
