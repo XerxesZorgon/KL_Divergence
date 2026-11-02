@@ -501,7 +501,7 @@ Add `include("test_crosscheck.jl")` to `test/runtests.jl`. Stage with `git add -
 ---
 
 ## Task 012: Move the E1 experiment into experiments/ and call the package (CSV byte-identical)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02)
 **Milestone:** M1
 **Depends on:** 011
 
@@ -543,3 +543,80 @@ Run from `code/` in **cmd** so redirection writes raw bytes:
 
 ### On Failure
 `TASK 012 FAILED — [which of 1–6] — [first differing line from the git diff, or error] — [error text]`
+
+**Result:** CSV and stdout byte-identical to the golden files; every E1 bet now also passes package certification.
+
+---
+
+## Task 013: Move the E1 plot into experiments/ (SVG byte-identical)
+**Status:** [x] Done (2026-11-02)
+**Milestone:** M1
+**Depends on:** 012
+
+### What to do
+In `code/`: `git mv e1_plot.jl experiments/e1_plot.jl`. Edit only the keyword defaults of `main` and add one copy step —
+**change nothing else**:
+1. `csv = joinpath(@__DIR__, "output", "e1_results.csv")`;
+2. `out = joinpath(@__DIR__, "output", "e1_kl_growth_loss.svg")`;
+3. new keyword `article = joinpath(@__DIR__, "..", "..", "img", "e1_kl_growth_loss.svg")`; after the SVG is written and
+   before the `println("wrote $out")`, add `mkpath(dirname(article)); cp(out, article; force = true)` (the article figure
+   folder `Projects/extended-kelly-KL/img/`, outside the repository).
+Run from `code/` (after Task 012's run, so `experiments/output/e1_results.csv` exists):
+`julia --project=. experiments/e1_plot.jl`. Stage with `git add -A` and commit with message
+`refactor(e1): plot moved to experiments; SVG byte-identical`.
+
+### Files touched
+- `code/experiments/e1_plot.jl` — moved + defaults edited (one concern: E1 figure)
+
+### Acceptance Criterion
+1. The run exits 0;
+2. `git diff --no-index --exit-code test/golden/e1_kl_growth_loss.svg experiments/output/e1_kl_growth_loss.svg` exits 0;
+3. `git diff --no-index --exit-code test/golden/e1_kl_growth_loss.svg ../img/e1_kl_growth_loss.svg` exits 0;
+4. `git log --oneline --follow experiments/e1_plot.jl` shows ≥ 2 commits;
+5. `julia --project=. -e "using Pkg; Pkg.test()"` still exits 0 with `Testing Kelly_KL tests passed`;
+6. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 013 FAILED — [which of 1–6] — [first differing line, or error] — [error text]`
+
+**Result:** SVG byte-identical in `experiments/output/` and `../img/`.
+
+---
+
+## Task 014: E1 stress and byte-identity tests in the suite (T-E1-1, T-E1-2)
+**Status:** [ ] Pending
+**Milestone:** M1
+**Depends on:** 013
+
+### What to do
+Create `code/test/test_e1.jl` with `@testset "E1 (T-E1-1, T-E1-2)"`:
+- Load the experiments without running them: `module E1Main; include(joinpath(@__DIR__, "..", "experiments", "e1_kl_growth_loss.jl")); end`
+  and `module E1Plot; include(joinpath(@__DIR__, "..", "experiments", "e1_plot.jl")); end` (their
+  `abspath(PROGRAM_FILE) == @__FILE__` guards keep them from auto-running).
+- **T-E1-1:** `viol, worst, kmax = E1Main.stress(; trials = QUICK ? 5_000 : 50_000)`; `@test viol == 0`;
+  `@test worst ≤ 1 + 1e-10`; `@test kmax ≤ 1e-10`.
+- **T-E1-2:** in `mktempdir()`, run `E1Main.main(; out = csv)` then
+  `E1Plot.main(; csv, out = svg, article = joinpath(tmp, "article.svg"))` (never touch `../img/` from tests).
+  Golden files: `test/golden/e1_results.csv`, `test/golden/e1_kl_growth_loss.svg`.
+  - If `haskey(ENV, "KELLY_KL_REFERENCE_HOST")`: `@test read(csv) == read(golden_csv)` and `@test read(svg) == read(golden_svg)`.
+  - Otherwise: a CSV tolerance check — same number of lines, identical header, and for every data line the first field is
+    equal and every other field `x` (new) vs `y` (golden) parsed as `Float64` satisfies
+    `abs(x - y) ≤ max(1e-12 * abs(y), 1e-15)` (one `@test` per file: all fields pass); and `@test_skip` for the SVG.
+- Add `include("test_e1.jl")` to `test/runtests.jl` (after `test_crosscheck.jl`).
+Stage with `git add -A` and commit with message `test(e1): T-E1-1 stress and T-E1-2 byte identity in the suite`.
+
+### Files touched
+- `code/test/test_e1.jl` — new; `code/test/runtests.jl` — include line (one concern: E1 regression tests)
+
+### Acceptance Criterion
+1. Reference run, from `code/` in cmd: `cmd /c "set KELLY_KL_REFERENCE_HOST=1&& julia --project=. -e "using Pkg; Pkg.test()""`
+   — if the nested quotes fail, run the same two commands in one cmd session: `set KELLY_KL_REFERENCE_HOST=1` then
+   `julia --project=. -e "using Pkg; Pkg.test()"` — exits 0 with `Testing Kelly_KL tests passed`, and testset
+   `E1 (T-E1-1, T-E1-2)` shows ≥ 5 Pass, 0 Fail, 0 Error, 0 Broken;
+2. Non-reference run (variable unset, new shell): `julia --project=. -e "using Pkg; Pkg.test()"` exits 0; testset
+   `E1 (T-E1-1, T-E1-2)` shows ≥ 4 Pass, 0 Fail, 0 Error and exactly 1 Broken (the skipped SVG check);
+3. all earlier testsets still 0 Fail in both runs;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 014 FAILED — [which of 1–4] — [failing test, first differing CSV line/field] — [error text]`

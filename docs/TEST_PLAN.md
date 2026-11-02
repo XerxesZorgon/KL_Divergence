@@ -47,7 +47,7 @@ Random tests use fixed seeds (StableRNG for new tests; E1 tests keep Xoshiro, AD
 ### C. E1 tests
 | ID | What | Pass criterion |
 |---|---|---|
-| T-E1-1 | E1 stress test (package code) | 50 000 trials, seed 7, n ∈ 2:12, σ ∈ [0,2], τ ∈ [0,1.5], ρ ∈ [0,0.3], c ∈ [0,0.2]: violations of L ≤ D(p‖q) + 1e-10 = 0; max L/D ≤ 1 + 1e-10; worst KKT ≤ 1e-10 |
+| T-E1-1 | E1 stress test (package code) | 50 000 trials, seed 7, n ∈ 2:12, σ ∈ [0,2], τ ∈ [0,1.5], ρ ∈ [0,0.3], c ∈ [0,0.2]: violations of L ≤ D(p‖q) + 1e-10 = 0; worst KKT ≤ 1e-10 (L/D is not tested: ill-conditioned when D is tiny — Task 014) |
 | T-E1-2 | E1 refactor identity | refactored `experiments/e1_kl_growth_loss.jl` and `e1_plot.jl` produce `e1_results.csv` and `e1_kl_growth_loss.svg` byte-identical to the golden files made by the **original** scripts (git tag `e1-original`) on the same machine and Julia version |
 | T-E1-3 | Cover update cross-check | `cover_update` agrees with greedy within 1e-8 on 1 000 non-degenerate cases; documented known stall case (from E1) reproduces kkt > 1e-3 (test that the cross-check is not trusted) |
 

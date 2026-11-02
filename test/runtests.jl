@@ -14,4 +14,5 @@ const QUICK = get(ENV, "KELLY_KL_QUICK", "0") == "1"
     include("test_optimize.jl")
     include("test_diagnostics.jl")
     include("test_crosscheck.jl")
+    include("test_e1.jl")
 end
