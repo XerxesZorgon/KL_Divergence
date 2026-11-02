@@ -813,8 +813,8 @@ Add `include("test_conic_raw.jl")` to `test/runtests.jl`. Stage with `git add -A
 `TASK 017 FAILED — [which of 1–3] — [failing test, case, max abs error or solver status] — [error text]`
 
 **Attempt 1 (2026-11-02): FAILED** — (a) seed 601, trial 25 (n = 3): raw Clarabel allocation error 1.016e-4 > 1e-4;
-(b)–(e) and the other 199 cases pass. Diagnosis (reproduced in Python): a near-marginal bet (expected return
-q·ô = 0.99943, just above the reserve rate R = 0.74389·… threshold path) makes the growth surface nearly flat, so an
+(b)–(e) and the other 199 cases pass. Diagnosis (reproduced in Python): a bet with expected return
+q·ô = 0.9994 (barely below break-even) still gets a 8.6% stake; along that direction the growth surface is nearly flat, so an
 interior-point solution that is optimal to 4.6e-10 in growth can sit 1e-4 away in allocation. Allocation distance is
 the wrong yardstick for a raw solve; the growth gap is the well-conditioned one. Spec error, not a code bug.
 
