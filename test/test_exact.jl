@@ -56,3 +56,4 @@ using Kelly_KL: full_investment_allocation, greedy_allocation
         @test_throws ArgumentError greedy_allocation([0.5], [0.0])
     end
 end
+

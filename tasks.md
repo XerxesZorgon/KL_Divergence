@@ -256,7 +256,7 @@ Add `include("test_model.jl")` to `test/runtests.jl`. Stage with `git add -A` an
 ---
 
 ## Task 007: Results, errors, KKT residual, certification
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02)
 **Milestone:** M1
 **Depends on:** 006
 
@@ -300,3 +300,69 @@ Add `include("test_certify.jl")` to `test/runtests.jl`. Stage with `git add -A` 
 
 ### On Failure
 `TASK 007 FAILED — [which of 1–3] — [failing test name, expected vs got] — [error text]`
+
+**Result:** certify testset 11 Pass.
+
+---
+
+## Task 008: Exact allocations — full investment and greedy with cash
+**Status:** [ ] Pending
+**Milestone:** M1
+**Depends on:** 007
+
+### What to do
+Create `code/src/exact.jl`, include it from `src/Kelly_KL.jl` after `certify.jl` (not exported; internal API
+`Kelly_KL.full_investment_allocation`, `Kelly_KL.greedy_allocation`). Implement:
+- `full_investment_allocation(q) = collect(Float64, q)` (a = q, Cover & Thomas Thm 6.1.2).
+- `greedy_allocation(q, ohat)` — first validate (`ArgumentError`): equal lengths ≥ 1, `q .≥ 0`,
+  `sum(q) ≤ 1 + 1e-12` (sum < 1 is allowed: outcomes with no available bet), `ohat` finite and `> 0`.
+  Then the body must be a **verbatim port** of E1's `kelly_exact` (same statements, same order, so results are
+  bit-identical):
+  ```julia
+  n = length(q)
+  order = sortperm(q .* ohat; rev=true)
+  S = Int[]; pS = 0.0; σS = 0.0; R = 1.0
+  for i in order
+      q[i] * ohat[i] > R || break
+      push!(S, i); pS += q[i]; σS += 1 / ohat[i]
+      R = (pS >= 1 - 1e-15 || σS >= 1) ? 0.0 : (1 - pS) / (1 - σS)
+  end
+  f = zeros(n)
+  for i in S
+      f[i] = max(q[i] - R / ohat[i], 0.0)
+  end
+  return vcat(max(1 - sum(f), 0.0), f)
+  ```
+  Returned vector is `[cash; stakes]`.
+Create `code/test/test_exact.jl` with `@testset "exact"`, all randomness from `StableRNGs.StableRNG(seed)`
+(add `using StableRNGs` there; add `StableRNGs` to `[extras]` and to `[targets] test` in `Project.toml`
+only if `Pkg.test()` cannot load it from `[deps]`), probability vectors drawn as normalized `randexp`:
+- **T-ORC-1 (greedy)**, seed 101, 1 000 cases: `p = rand(rng)`, `w = 1 + 49 * rand(rng)` (so w ∈ (1, 50]);
+  `a = greedy_allocation([p], [w])`; expected bet `max((p*w - 1)/(w - 1), 0.0)`; `@test abs(a[2] - expected) ≤ 1e-12`
+  and `@test abs(a[1] - (1 - expected)) ≤ 1e-12`; and `assert_certified(BetResult(m, a, :greedy), m)` with
+  `m = ScenarioModel([p, 1 - p], [1.0 w; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :single_event)`.
+- **T-ORC-2**, seed 102, 1 000 cases, `n = rand(rng, 2:12)`, truth `p`, belief `q`, odds `o = 1 .+ 9 .* rand(rng, n)`:
+  `full_investment_allocation(q) == q`; with `X = Matrix(Diagonal(o))`,
+  `abs(growth(X, q, p) - (sum(p .* log.(o)) + sum(p .* log.(p)) - sum(p .* log.(p ./ q)))) ≤ 1e-12`
+  (i.e. Σ p log o − H(p) − D(p‖q)); `abs((growth(X, p, p) - growth(X, q, p)) - sum(p .* log.(p ./ q))) ≤ 1e-12`;
+  and `assert_certified(BetResult(m, q, :full_investment), m)` for `m = single_event(q, o; cash = false)`.
+- **Greedy certification on multi-outcome events**, seed 103, 1 000 cases: `n = rand(rng, 2:12)`, `q` random,
+  market `m_ = ` normalized `q .* exp.(0.5 .* randn(rng, n))`, overround `ρ = 0.3 * rand(rng)`,
+  `ohat = payoffs_from_odds(1.0 ./ (m_ .* (1 + ρ)); commission = 0.2 * rand(rng))`;
+  `assert_certified(BetResult(single_event(q, ohat), greedy_allocation(q, ohat), :greedy), single_event(q, ohat))`.
+- Validation: `greedy_allocation([0.6, 0.6], [2.0, 2.0])` and `greedy_allocation([0.5], [0.0])` throw `ArgumentError`.
+Add `include("test_exact.jl")` to `test/runtests.jl`. Stage with `git add -A` and commit with message
+`feat(exact): full-investment and greedy allocations (T-ORC-1 greedy, T-ORC-2)`.
+
+### Files touched
+- `code/src/exact.jl` — new; `code/src/Kelly_KL.jl` — include (one concern: exact solvers)
+- `code/test/test_exact.jl` — new; `code/test/runtests.jl` — include line; `Project.toml` only if needed
+
+### Acceptance Criterion
+1. `julia --project=. -e "using Pkg; Pkg.test()"` exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `exact` shows ≥ 3 000 Pass, 0 Fail, 0 Error; `certify`, `model`, `Aqua (T-AQ-1)` still 0 Fail;
+3. the body of `greedy_allocation` after validation is textually identical to the block above (whitespace aside);
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 008 FAILED — [which of 1–4] — [failing test, seed, case index, expected vs got] — [error text]`

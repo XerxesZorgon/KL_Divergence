@@ -33,3 +33,4 @@ function greedy_allocation(q::AbstractVector{<:Real}, ohat::AbstractVector{<:Rea
     end
     return vcat(max(1 - sum(f), 0.0), f)
 end
+
