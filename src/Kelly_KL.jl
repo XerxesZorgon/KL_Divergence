@@ -12,5 +12,6 @@ include("certify.jl")
 include("exact.jl")
 include("optimize.jl")
 include("diagnostics.jl")
+include("crosscheck.jl")
 
 end

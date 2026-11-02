@@ -20,3 +20,4 @@ function kl(p::AbstractVector{<:Real}, q::AbstractVector{<:Real})
     end
     return sum(p[i] > 0 ? p[i] * log(p[i] / q[i]) : 0.0 for i in eachindex(p))
 end
+

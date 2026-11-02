@@ -24,3 +24,4 @@ using StableRNGs, Random
     @test_throws ArgumentError kl([0.5, 0.5], [1.0])
     @test_throws ArgumentError kl([0.5, -0.5], [0.5, 0.5])
 end
+

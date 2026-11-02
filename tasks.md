@@ -372,7 +372,7 @@ Add `include("test_exact.jl")` to `test/runtests.jl`. Stage with `git add -A` an
 ---
 
 ## Task 009: optimal_allocation dispatch for single events
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02)
 **Milestone:** M1
 **Depends on:** 008
 
@@ -415,3 +415,38 @@ Add `include("test_optimize.jl")` to `test/runtests.jl`. Stage with `git add -A`
 
 ### On Failure
 `TASK 009 FAILED — [which of 1–3] — [failing test, seed, case index, expected vs got] — [error text]`
+
+**Result:** optimize testset 8 009 Pass. Antigravity replaced an infeasible no-cash fixture with a feasible one
+(π = [1, 0]); the intended rejection is still tested.
+
+---
+
+## Task 010: KL divergence
+**Status:** [ ] Pending
+**Milestone:** M1
+**Depends on:** 009
+
+### What to do
+Create `code/src/diagnostics.jl`, include it from `src/Kelly_KL.jl` after `optimize.jl`, export `kl`.
+Implement `kl(p, q)`: validate (`ArgumentError`) equal lengths ≥ 1 and all entries finite and `≥ 0`; then return
+exactly E1's expression `sum(p[i] > 0 ? p[i] * log(p[i] / q[i]) : 0.0 for i in eachindex(p))` (0·log 0 = 0;
+`+Inf` when some `p_i > 0 = q_i`). Docstring: D(p‖q) in nats; remaining diagnostics arrive in M4.
+Create `code/test/test_diagnostics.jl` with `@testset "diagnostics: kl"`:
+(a) `kl([0.5, 0.5], [0.25, 0.75]) ≈ 0.14384103622589045` (atol 1e-15);
+(b) `kl([1.0, 0.0], [0.5, 0.5]) ≈ log(2)` (atol 1e-15); (c) `kl([0.5, 0.5], [1.0, 0.0]) == Inf`;
+(d) seed 301 (StableRNG), 1 000 random pairs, n ∈ 2:12: `kl(p, p) == 0.0` and `kl(p, q) ≥ 0`;
+(e) `kl([0.5, 0.5], [1.0])` and `kl([0.5, -0.5], [0.5, 0.5])` throw `ArgumentError`.
+Add `include("test_diagnostics.jl")` to `test/runtests.jl`. Stage with `git add -A` and commit with message
+`feat(diagnostics): kl`.
+
+### Files touched
+- `code/src/diagnostics.jl` — new; `code/src/Kelly_KL.jl` — include + export (one concern: KL divergence)
+- `code/test/test_diagnostics.jl` — new; `code/test/runtests.jl` — include line
+
+### Acceptance Criterion
+1. `julia --project=. -e "using Pkg; Pkg.test()"` exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `diagnostics: kl` shows ≥ 2 000 Pass, 0 Fail, 0 Error; all earlier testsets still 0 Fail;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 010 FAILED — [which of 1–3] — [failing test, expected vs got] — [error text]`
