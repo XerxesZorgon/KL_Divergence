@@ -953,7 +953,7 @@ Stage with `git add -A` and commit with message `feat(optimize): conic + polish 
 ---
 
 ## Task 020: Conic-path oracle tests — T-ORC-1 (conic), T-ORC-8, T-ERR-2
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02, after Fix 020a, commit 4f85f20)
 **Milestone:** M2
 **Depends on:** 019
 
@@ -987,3 +987,57 @@ Add `include("test_conic.jl")` to `test/runtests.jl`. Stage with `git add -A` an
 
 ### On Failure
 `TASK 020 FAILED — [which of 1–3] — [test ID, seed, case index, error vs tolerance, kkt] — [error text]`
+
+**Attempt 1 (2026-11-02): FAILED** — T-ERR-2: `round.(r.a[2:3]; digits = 4)` = [0.0645, 0.0992] ≠ published
+[0.0645, 0.0991]. Full-precision check (≤ 1e-10) and certification passed; T-ORC-1c and T-ORC-8 all 2 000 cases passed.
+Diagnosis: 0.09915443… rounds to 0.0992; the parent article's 0.0991 is a 4-decimal truncation. Spec error in the test;
+minor presentation erratum in the parent article (added to the errata track).
+
+### Fix 020a
+In `code/test/test_conic.jl`, T-ERR-2: replace the `round.(…)` assertion with
+`@test floor.(r.a[2:3] .* 1e4) ./ 1e4 == [0.0645, 0.0991]` (published values are 4-decimal truncations) and
+`@test round.(r.a[2:3]; digits = 4) == [0.0645, 0.0992]` (correct rounding), with the comment
+`# parent article prints 0.0991 by truncation; correctly rounded it is 0.0992 (Task 020)`.
+Rerun the reference suite and commit as in Task 020. Acceptance as Task 020, with ≥ 6 006 Pass.
+
+**Result (Fix 020a):** 6 006 Pass; suite 32 284 Pass. Errata track gains a minor item: parent article prints 0.0991
+(truncated) for a stake that rounds to 0.0992.
+
+---
+
+## Task 021: L ≤ D beyond single events (T-ORC-3) and KKT on larger conic problems (T-ORC-5)
+**Status:** [ ] Pending
+**Milestone:** M2
+**Depends on:** 020
+
+### What to do
+Create `code/test/test_general.jl` with `@testset "general models (T-ORC-3, T-ORC-5)"` (StableRNG; `N3 = QUICK ? 100 : 1000`, `N5 = QUICK ? 50 : 500`):
+- **T-ORC-3 (simultaneous)**, seed 901, `N3` cases: `n = rand(rng, 2:6)`; `p = 0.05 .+ 0.85 .* rand(rng, n)`;
+  `mk = clamp.(p .* exp.(0.3 .* randn(rng, n)), 0.02, 0.95)`; `w = 1 ./ (mk .* (1 + 0.05 * rand(rng)))`;
+  belief `pb = clamp.(p .* exp.((2 * rand(rng)) .* randn(rng, n)), 0.01, 0.99)`; `mt = simultaneous_bets(p, w)`,
+  `mb = simultaneous_bets(pb, w)`; `rt = optimal_allocation(mt)`, `rb = optimal_allocation(mb)`;
+  `L = growth(mt, rt.a) - growth(mt, rb.a)`, `D = kl(mt.π, mb.π)`; `@test -1e-10 ≤ L ≤ D + 1e-10`;
+  `assert_certified(rt, mt)`; `assert_certified(rb, mb)`.
+- **T-ORC-3 (correlated)**, seed 902, `N3` cases: `S = rand(rng, 4:64)`; `n = rand(rng, 2:11)`; truth `π` = normalized
+  `randexp(rng, S)`; `W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]`; belief
+  `πb` = normalized `π .* exp.((2 * rand(rng)) .* randn(rng, S))`; `mt = correlated_bets(π, W)`, `mb = correlated_bets(πb, W)`;
+  same three assertions.
+- **T-ORC-5**, seed 903, `N5` cases: `S = rand(rng, 4:256)`; `n = rand(rng, 1:11)` (so J ≤ 12); `π`, `W` as above;
+  `m = correlated_bets(π, W)`; `r = optimal_allocation(m)`; `assert_certified(r, m)`.
+(Prototype, Python Clarabel + Julia polish, 300 problems with S up to 256 and J up to 12: worst KKT 3.1e-13, 0 failures;
+one raw Clarabel solve was flagged "inaccurate" and the polish still certified it.)
+Add `include("test_general.jl")` to `test/runtests.jl`. Stage with `git add -A` and commit with message
+`test(general): T-ORC-3 (L ≤ D beyond single events), T-ORC-5`.
+
+### Files touched
+- `code/test/test_general.jl` — new; `code/test/runtests.jl` — include line (one concern: general-model oracle tests)
+
+### Acceptance Criterion
+1. Reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, then `julia --project=. -e "using Pkg; Pkg.test()"`)
+   exits 0 with `Testing Kelly_KL tests passed` (full mode: `KELLY_KL_QUICK` unset);
+2. testset `general models (T-ORC-3, T-ORC-5)` shows ≥ 7 000 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. report the wall time of that testset from the summary;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 021 FAILED — [which of 1–4] — [test ID, seed, case index, L and D or kkt, or SolverError status] — [error text]`
