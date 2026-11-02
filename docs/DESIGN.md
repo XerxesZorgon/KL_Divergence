@@ -66,7 +66,7 @@ end
 ```
 Validation (constructor throws `ArgumentError` with the failing rule):
 1. size(X, 1) == length(π) ≥ 1, size(X, 2) == length(assets) ≥ 1;
-2. π_s ≥ 0, |Σ_s π_s − 1| ≤ 1e-12 (then renormalized exactly);
+2. π_s ≥ 0, |Σ_s π_s − 1| ≤ 1e-12 (stored as given, not renormalized — keeps E1 bit-identical; Task 006);
 3. all X_sj finite and ≥ 0;
 4. **feasibility:** some a ∈ Δ^J has V_s(a) > 0 for every s with π_s > 0 (checked by
    a = uniform: V_s(uniform) > 0 ⇔ every positive-probability row has a positive entry). If it fails,

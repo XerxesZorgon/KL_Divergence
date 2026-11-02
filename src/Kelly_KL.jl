@@ -1,3 +1,9 @@
 module Kelly_KL
-end
 
+using LinearAlgebra
+
+export ScenarioModel, single_event, payoffs_from_odds, growth
+
+include("model.jl")
+
+end

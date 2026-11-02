@@ -101,7 +101,7 @@ because `loss` is a difference of two nearly equal growths. Non-reference-machin
 ---
 
 ## Task 004: Create Project.toml and resolve the pinned Manifest
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02)
 **Milestone:** M0
 **Depends on:** 003
 
@@ -142,4 +142,58 @@ package loads. Stage everything with `git add -A` (this includes the updated `ta
 `TASK 004 FAILED — [which of 1–4] — [observed output] — [error text]`
 
 ---
-(Milestone M1 tasks are written after the M0 gate passes.)
+**Result:** all seven packages at the Dependency Lock versions on Julia 1.12.1; resolver changes: none.
+Pkg also wrote stdlib compat entries (LinearAlgebra 1.12.0, Printf/Random 1.11.0, Statistics 1.11.5, TOML 1.0.3).
+
+**M0 complete (2026-11-02).**
+
+---
+
+# Milestone M1 — Core data model, exact solver, certification; E1 refactored
+
+Sequence (full task text is written when the previous task is green):
+005. Test harness + Aqua — `Pkg.test()` passes on the stub module
+006. `src/model.jl` — `ScenarioModel`, validation, `single_event`, `payoffs_from_odds`, `growth`
+007. `src/certify.jl` — `BetResult`, errors, full KKT residual ρ, `certify`; `test/certify_hook.jl`
+008. `src/exact.jl` — full investment (a = q) and greedy-with-cash; T-ORC-1 (greedy), T-ORC-2
+009. `src/optimize.jl` — `optimal_allocation` dispatch for single events, always certified
+010. `src/diagnostics.jl` — `kl` (rest of diagnostics in M4)
+011. `src/crosscheck.jl` — `cover_update`; T-E1-3 incl. the recorded stall case
+012. `experiments/e1_kl_growth_loss.jl` — moved, calls the package, CSV byte-identical to golden
+013. `experiments/e1_plot.jl` — moved, SVG byte-identical to golden
+014. `test/test_e1.jl` — T-E1-1 (stress) and T-E1-2 (byte identity) in the suite
+015. Move `E1_RESULTS.md` to `experiments/`, update run instructions and CHANGELOG
+Note: T-ORC-8 (greedy = conic) needs the conic path and runs in M2.
+Gate: full `Pkg.test()` green incl. Aqua, T-ORC-1 (greedy), T-ORC-2, T-E1-1, T-E1-2, T-E1-3.
+
+---
+
+## Task 005: Test harness and Aqua
+**Status:** [ ] Pending
+**Milestone:** M1
+**Depends on:** 004
+
+### What to do
+Create `code/test/runtests.jl` containing: `using Test, Kelly_KL, Aqua`;
+`const QUICK = get(ENV, "KELLY_KL_QUICK", "0") == "1"`; and a top-level `@testset "Kelly_KL"` containing
+one inner `@testset "Aqua (T-AQ-1)"` that calls `Aqua.test_all(Kelly_KL; stale_deps = false)`, with the
+comment `# stale_deps re-enabled in M8 (T-AQ-1 full), once every dependency is used`. Later tasks add
+`include("test_<component>.jl")` lines inside the top-level testset. Add `Test = "1"` to `[compat]` in
+`code/Project.toml` (Aqua's compat check covers extras). If any other Aqua sub-test fails, report it
+verbatim; do not disable further checks. Stage with `git add -A` and commit with message
+`test: harness and Aqua (T-AQ-1, stale_deps deferred to M8)`.
+
+### Files touched
+- `code/test/runtests.jl` — new (one concern: test harness)
+- `code/Project.toml` — `[compat]` gains `Test = "1"`
+
+### Acceptance Criterion
+1. In `code/`, `julia --project=. -e "using Pkg; Pkg.test()"` exits 0 and its output contains
+   `Testing Kelly_KL tests passed`;
+2. the printed test summary shows the `Aqua (T-AQ-1)` testset with 0 Fail and 0 Error;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 005 FAILED — [which of 1–3] — [failing Aqua sub-test name and message] — [error text]`
+
+---
