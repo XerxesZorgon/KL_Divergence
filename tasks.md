@@ -832,7 +832,7 @@ Acceptance: as Task 017, with testset `conic (raw)` ≥ 405 Pass, 0 Fail, 0 Erro
 ---
 
 ## Task 018: Newton polish on the active set
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02, commit 785c0d2)
 **Milestone:** M2
 **Depends on:** 017
 
@@ -903,3 +903,87 @@ Add `include("test_polish.jl")` to `test/runtests.jl`. Stage with `git add -A` a
 
 ### On Failure
 `TASK 018 FAILED — [which of 1–3] — [part, seed, case index, ρ or allocation error] — [error text]`
+
+**Result:** polish testset 500 Pass (150 simultaneous, 150 correlated, 100 single events = greedy to 1e-10); suite 26 267 Pass.
+
+---
+
+## Task 019: General optimal_allocation path (conic + polish + certify) and `method` keyword
+**Status:** [x] Done (2026-11-02, commit 5f369c9)
+**Milestone:** M2
+**Depends on:** 018
+
+### What to do
+In `code/src/optimize.jl` change the signature to
+`optimal_allocation(m::ScenarioModel; method::Symbol = :auto, solver::Symbol = :clarabel, tol = CERT_TOL)`:
+- validate `method ∈ (:auto, :conic)` (else `ArgumentError`);
+- if `method === :auto && m.structure === :single_event`: the existing exact path, unchanged (greedy / full investment);
+- otherwise (any other structure, or `method === :conic`): `a_raw = solve_conic(m; solver)`,
+  `a, _ = polish_log_optimal(m.X, m.π, a_raw; tol)`, and return `certify(BetResult(m, a, solver); tol)` — so
+  `result.method` is `:clarabel` or `:scs` (DESIGN §3.2), and an unpolishable problem throws `CertificationError`.
+- Delete the old `ArgumentError("structure … requires the conic path (milestone M2)")` branch.
+- The shortcut becomes `optimal_allocation(q, ohat; cash::Bool = true, method::Symbol = :auto, solver::Symbol = :clarabel, tol = CERT_TOL) = optimal_allocation(single_event(q, ohat; cash); method, solver, tol)`.
+- Update the docstring: dispatch rules, the `method` and `solver` keywords, and "every returned bet is certified (KKT ≤ tol)".
+In `code/test/test_optimize.jl`:
+- replace the assertion that a `:simultaneous` model throws `ArgumentError` with: for `m_sim` (same data),
+  `r = optimal_allocation(m_sim)` has `r.method == :clarabel`, `maximum(abs.(r.a .- [0.8, 0.2])) ≤ 1e-10`, and `assert_certified(r, m_sim)`;
+- add: `optimal_allocation(m; method = :conic)` for the single-bet model `m` of part (c) gives `method == :clarabel` and
+  `maximum(abs.(r.a .- [0.8, 0.2])) ≤ 1e-10`;
+- add: `r = optimal_allocation(simultaneous_bets([0.3, 0.25], [4.0, 6.0]); solver = :scs)` has `r.method == :scs` and
+  `assert_certified(r, simultaneous_bets([0.3, 0.25], [4.0, 6.0]))`;
+- add: `optimal_allocation(m; method = :foo)` throws `ArgumentError`.
+Stage with `git add -A` and commit with message `feat(optimize): conic + polish path for general models; method keyword`.
+
+### Files touched
+- `code/src/optimize.jl` — general path + keywords (one concern: solver dispatch); `code/test/test_optimize.jl` — updated/added tests
+
+### Acceptance Criterion
+1. Reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, then `julia --project=. -e "using Pkg; Pkg.test()"`)
+   exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `optimize` shows ≥ 8 015 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken (E1 byte
+   identity still passes — the single-event exact path must be untouched);
+3. `git grep -n "milestone M2" -- src` prints nothing;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 019 FAILED — [which of 1–4] — [failing test, expected vs got, kkt] — [error text]`
+
+**Result:** optimize testset 8 020 Pass (SCS start polished and certified); suite 26 278 Pass.
+
+---
+
+## Task 020: Conic-path oracle tests — T-ORC-1 (conic), T-ORC-8, T-ERR-2
+**Status:** [ ] Pending
+**Milestone:** M2
+**Depends on:** 019
+
+### What to do
+Create `code/test/test_conic.jl` with `@testset "conic oracles (T-ORC-1c, T-ORC-8, T-ERR-2)"` (StableRNG; `using Kelly_KL: greedy_allocation`):
+- **T-ORC-1 (conic path)**, seed 801, 1 000 cases: `p = rand(rng)`, `w = 1 + 49 * rand(rng)`;
+  `m = ScenarioModel([p, 1 - p], [1.0 w; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :single_event)`;
+  `r = optimal_allocation(m; method = :conic)`; `@test abs(r.a[2] - max((p*w - 1)/(w - 1), 0.0)) ≤ 1e-10`; `assert_certified(r, m)`.
+- **T-ORC-8 (greedy = conic)**, seed 802: repeat (at most 100 000 tries) until 1 000 non-degenerate single events are
+  accepted, generated and filtered exactly as Task 011 part (a) (n ∈ 2:6, strict complementarity with margins 1e-3);
+  for each, `r = optimal_allocation(q, ohat; method = :conic)`; `@test maximum(abs.(r.a .- greedy_allocation(q, ohat))) ≤ 1e-10`;
+  `assert_certified(r, single_event(q, ohat))`; after the loop `@test accepted == 1000`.
+- **T-ERR-2 (parent two-bet example)**: `m = simultaneous_bets([0.3, 0.25], [4.0, 6.0])`; `r = optimal_allocation(m)`;
+  `@test round.(r.a[2:3]; digits = 4) == [0.0645, 0.0991]` (published values);
+  `@test maximum(abs.(r.a .- [0.8363453271373047, 0.06450023479783634, 0.09915443806486002])) ≤ 1e-10`
+  (full-precision reference from a 2026-11-02 Julia polish prototype; scipy SLSQP independently gives 0.06450023, 0.09915443);
+  `assert_certified(r, m)`.
+(Prototype, Python Clarabel + Julia polish, T-ORC-1 family, 1 000 cases: worst allocation error 3.0e-13, worst KKT 3.4e-13.)
+Add `include("test_conic.jl")` to `test/runtests.jl`. Stage with `git add -A` and commit with message
+`test(conic): T-ORC-1 conic path, T-ORC-8, T-ERR-2`.
+
+### Files touched
+- `code/test/test_conic.jl` — new; `code/test/runtests.jl` — include line (one concern: conic oracle tests)
+
+### Acceptance Criterion
+1. Reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, then `julia --project=. -e "using Pkg; Pkg.test()"`)
+   exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `conic oracles (T-ORC-1c, T-ORC-8, T-ERR-2)` shows ≥ 6 005 Pass, 0 Fail, 0 Error; every other testset
+   0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 020 FAILED — [which of 1–3] — [test ID, seed, case index, error vs tolerance, kkt] — [error text]`
