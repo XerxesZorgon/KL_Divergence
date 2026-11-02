@@ -33,39 +33,17 @@ using Kelly_KL: greedy_allocation
     end
 
     # (c) single bet as a general single-event model
-    m = ScenarioModel([0.6, 0.4], [1.0 2.0; 1.0 0.0];
-                      assets = ["cash", "bet"],
-                      has_cash = true,
-                      structure = :single_event)
+    m = ScenarioModel([0.6, 0.4], [1.0 2.0; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :single_event)
     res_c = optimal_allocation(m)
     @test res_c.a ≈ [0.8, 0.2] atol = 1e-15
     @test res_c.method == :greedy
     assert_certified(res_c, m)
 
     # (d) invalid structure or invalid single-event shape throws ArgumentError
-    m_sim = ScenarioModel([0.6, 0.4], [1.0 2.0; 1.0 0.0];
-                          assets = ["cash", "bet"],
-                          has_cash = true,
-                          structure = :simultaneous)
-    @test_throws ArgumentError optimal_allocation(m_sim)
-
-    m_two_pays = ScenarioModel([0.6, 0.4], [1.0 2.0; 1.0 1.5];
-                               assets = ["cash", "bet"],
-                               has_cash = true,
-                               structure = :single_event)
-    @test_throws ArgumentError optimal_allocation(m_two_pays)
-
-    m_dup_scen = ScenarioModel([0.6, 0.4], [1.0 2.0 3.0; 1.0 0.0 0.0];
-                               assets = ["cash", "bet1", "bet2"],
-                               has_cash = true,
-                               structure = :single_event)
-    @test_throws ArgumentError optimal_allocation(m_dup_scen)
-
-    m_nocash_incomplete = ScenarioModel([1.0, 0.0], reshape([2.0, 0.0], 2, 1);
-                                        assets = ["bet1"],
-                                        has_cash = false,
-                                        structure = :single_event)
-    @test_throws ArgumentError optimal_allocation(m_nocash_incomplete)
+    @test_throws ArgumentError optimal_allocation(ScenarioModel([0.6, 0.4], [1.0 2.0; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :simultaneous))
+    @test_throws ArgumentError optimal_allocation(ScenarioModel([0.6, 0.4], [1.0 2.0; 1.0 1.5]; assets = ["cash", "bet"], has_cash = true, structure = :single_event))
+    @test_throws ArgumentError optimal_allocation(ScenarioModel([0.6, 0.4], [1.0 2.0 3.0; 1.0 0.0 0.0]; assets = ["cash", "bet1", "bet2"], has_cash = true, structure = :single_event))
+    @test_throws ArgumentError optimal_allocation(ScenarioModel([1.0, 0.0], reshape([2.0, 0.0], 2, 1); assets = ["bet1"], has_cash = false, structure = :single_event))
 
     # (e) deliberately wrong stored allocation raises through certify
     @test_throws CertificationError certify(BetResult(m, [0.9, 0.1], :greedy))

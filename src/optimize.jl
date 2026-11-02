@@ -1,51 +1,34 @@
+function single_event_inputs(m::ScenarioModel)
+    bets = m.has_cash ? (2:size(m.X, 2)) : (1:size(m.X, 2))
+    s_of_bet = Vector{Int}(undef, length(bets))
+    for (k, j) in enumerate(bets)
+        pos_rows = findall(>(0.0), @view m.X[:, j])
+        length(pos_rows) == 1 || throw(ArgumentError("single_event shape: column $j (\"$(m.assets[j])\") has $(length(pos_rows)) positive entries, expected 1"))
+        sj = pos_rows[1]
+        sj in @view(s_of_bet[1:k-1]) && throw(ArgumentError("single_event shape: column $j (\"$(m.assets[j])\") pays in scenario $sj, which is already used by another bet column"))
+        s_of_bet[k] = sj
+    end
+    return [m.π[s] for s in s_of_bet], [m.X[s_of_bet[k], bets[k]] for k in eachindex(bets)]
+end
+
 """
-    optimal_allocation(m::ScenarioModel; solver = :clarabel, tol = 1e-10) -> BetResult
-    optimal_allocation(q, ohat; cash::Bool = true, tol = 1e-10) -> BetResult
+    optimal_allocation(m::ScenarioModel; solver = :clarabel, tol = CERT_TOL) -> BetResult
+    optimal_allocation(q, ohat; cash::Bool = true, tol = CERT_TOL) -> BetResult
 
 Compute and certify the log-optimal allocation for `m`.
 For `:single_event` models, exact closed-form paths (`:greedy` with cash, `:full_investment` without cash)
 are used; `solver` is accepted and ignored on these exact paths.
 """
-function optimal_allocation(m::ScenarioModel; solver = :clarabel, tol = 1e-10)
-    if m.structure != :single_event
-        throw(ArgumentError("structure :$(m.structure) requires the conic path (milestone M2)"))
-    end
-
-    S, J = size(m.X)
-    bets = m.has_cash ? collect(2:J) : collect(1:J)
-    s_of_bet = Vector{Int}(undef, length(bets))
-    seen_s = Set{Int}()
-
-    for (k, j) in enumerate(bets)
-        pos_rows = findall(>(0.0), @view m.X[:, j])
-        if length(pos_rows) != 1
-            throw(ArgumentError("single_event shape: column $j (\"$(m.assets[j])\") has $(length(pos_rows)) positive entries, expected 1"))
-        end
-        sj = pos_rows[1]
-        if sj in seen_s
-            throw(ArgumentError("single_event shape: column $j (\"$(m.assets[j])\") pays in scenario $sj, which is already used by another bet column"))
-        end
-        push!(seen_s, sj)
-        s_of_bet[k] = sj
-    end
-
-    q = [m.π[s_of_bet[k]] for k in eachindex(bets)]
-    ohat = [m.X[s_of_bet[k], bets[k]] for k in eachindex(bets)]
-
+function optimal_allocation(m::ScenarioModel; solver = :clarabel, tol = CERT_TOL)
+    m.structure == :single_event || throw(ArgumentError("structure :$(m.structure) requires the conic path (milestone M2)"))
+    q, ohat = single_event_inputs(m)
     if m.has_cash
-        a = greedy_allocation(q, ohat)
-        method = :greedy
-    else
-        if length(bets) != length(m.π)
-            throw(ArgumentError("single_event without cash requires length(bets)=$(length(bets)) == length(π)=$S (column 1)"))
-        end
-        a = full_investment_allocation(q)
-        method = :full_investment
+        return certify(BetResult(m, greedy_allocation(q, ohat), :greedy); tol = tol)
     end
-
-    return certify(BetResult(m, a, method); tol = tol)
+    length(q) == length(m.π) || throw(ArgumentError("single_event without cash requires length(bets)=$(length(q)) == length(π)=$(length(m.π)) (column 1)"))
+    return certify(BetResult(m, full_investment_allocation(q), :full_investment); tol = tol)
 end
 
-optimal_allocation(q, ohat; cash::Bool = true, tol = 1e-10) =
+optimal_allocation(q, ohat; cash::Bool = true, tol = CERT_TOL) =
     optimal_allocation(single_event(q, ohat; cash = cash); tol = tol)
 

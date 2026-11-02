@@ -584,7 +584,7 @@ Run from `code/` (after Task 012's run, so `experiments/output/e1_results.csv` e
 ---
 
 ## Task 014: E1 stress and byte-identity tests in the suite (T-E1-1, T-E1-2)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02, after Fix 014a)
 **Milestone:** M1
 **Depends on:** 013
 
@@ -632,3 +632,48 @@ Delete the `@test worst ≤ 1 + 1e-10` line from `test/test_e1.jl` (keep `viol =
 `# L/D not tested: ill-conditioned for tiny D (seed 7, trial 22 420: D = 1.45e-9 → ratio error 1.3e-7); L ≤ D + 1e-10 is the bound`).
 In `docs/TEST_PLAN.md` row T-E1-1, delete `max L/D ≤ 1 + 1e-10; ` and append
 ` (L/D is not tested: ill-conditioned when D is tiny — Task 014)`. Then rerun both acceptance runs and commit as in Task 014.
+
+**Result (Fix 014a):** reference run 4 Pass / 0 Broken; non-reference run 3 Pass / 1 Broken (SVG skipped).
+
+---
+
+## Task 015: Move E1_RESULTS.md, update run instructions and CHANGELOG
+**Status:** [ ] Pending
+**Milestone:** M1
+**Depends on:** 014
+
+### What to do
+In `code/`: `git mv E1_RESULTS.md experiments/E1_RESULTS.md`. In `experiments/E1_RESULTS.md`:
+1. Replace the two-line "Run:" paragraph under the title with:
+   "Run from `code/`: `julia --project=. experiments/e1_kl_growth_loss.jl` (writes `experiments/output/e1_results.csv`,
+   prints the summary and the stress test), then `julia --project=. experiments/e1_plot.jl` (writes
+   `experiments/output/e1_kl_growth_loss.svg` and copies it to `../img/`). Both call the Kelly_KL package (exact greedy
+   solver; every bet certified, full KKT residual ≤ 1e-10). Reference outputs: git tag `e1-original`, Julia 1.12.1 on
+   Windows 11; the summary is identical to the original Julia 1.13.3 (Linux) run at printed precision. Seeds 20261101
+   (main), 7 (stress), 1 (plot subsample)."
+2. In the stress-test table row, after `max L/D = 1.000000`, append: "(6 decimals; the exact maximum is 1 + 1.3e-7, at a
+   trial with D = 1.45e-9 — rounding error in L amplified by 1/D. The tested bound is L ≤ D + 1e-10; Task 014.)"
+Change nothing else in that file. In `CHANGELOG.md`, under `## [Unreleased]` (create it below the title if missing), add
+`### Added` with one bullet per item: "Tasks 001–004: git repository, golden E1 outputs (tag `e1-original`), pinned
+environment (Julia 1.12.1)", "Task 005: test harness and Aqua", "Task 006: `ScenarioModel`, `single_event`,
+`payoffs_from_odds`, `growth`", "Task 007: `BetResult`, `CertificationError`, `SolverError`, `kkt_residual`, `certify`",
+"Task 008: exact full-investment and greedy allocations (T-ORC-1 greedy, T-ORC-2)", "Task 009: certified
+`optimal_allocation` for single events", "Task 010: `kl`", "Task 011: `cover_update` cross-check (T-E1-3)",
+"Task 014: E1 regression tests T-E1-1, T-E1-2"; and `### Changed` with: "Tasks 012–013, 015: E1 experiment, plot and
+results moved to `experiments/` and refactored to call Kelly_KL; outputs byte-identical to `e1-original`",
+"Task 014: T-E1-1 no longer tests the L/D ratio (ill-conditioned for tiny D)".
+Run from `code/` in one cmd session: `set KELLY_KL_REFERENCE_HOST=1` then `julia --project=. -e "using Pkg; Pkg.test()"`.
+Stage with `git add -A` and commit with message `docs(e1): results moved to experiments; CHANGELOG for M1`.
+
+### Files touched
+- `code/experiments/E1_RESULTS.md` — moved + two edits; `code/CHANGELOG.md` — M1 entries (one concern: M1 documentation)
+
+### Acceptance Criterion
+1. `git ls-files` lists no file in the `code/` root whose name starts with `e1_` or `E1_` (check:
+   `git ls-files -- "e1_*" "E1_*"` prints nothing), and `git ls-files experiments` lists `experiments/E1_RESULTS.md`,
+   `experiments/e1_kl_growth_loss.jl`, `experiments/e1_plot.jl`;
+2. the reference `Pkg.test()` run exits 0 with `Testing Kelly_KL tests passed`, every testset 0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 015 FAILED — [which of 1–3] — [observed output] — [error text]`

@@ -1,23 +1,11 @@
 full_investment_allocation(q) = collect(Float64, q)
 
 function greedy_allocation(q::AbstractVector{<:Real}, ohat::AbstractVector{<:Real})
-    if length(q) != length(ohat) || length(q) < 1
-        throw(ArgumentError("greedy_allocation: length(q)=$(length(q)) != length(ohat)=$(length(ohat)) or < 1 (index 1)"))
-    end
-    for (i, p) in enumerate(q)
-        if !(isfinite(p) && p >= 0.0)
-            throw(ArgumentError("greedy_allocation: q[$i] = $p must be finite and ≥ 0 at index $i"))
-        end
-    end
+    (length(q) == length(ohat) && length(q) >= 1) || throw(ArgumentError("greedy_allocation: length(q)=$(length(q)) != length(ohat)=$(length(ohat)) or < 1 (index 1)"))
+    require_nonneg_finite(q, "greedy_allocation: q")
     sq = sum(q)
-    if !(isfinite(sq) && sq <= 1.0 + 1e-12)
-        throw(ArgumentError("greedy_allocation: sum(q) = $sq > 1 + 1e-12 (index 1)"))
-    end
-    for (i, v) in enumerate(ohat)
-        if !(isfinite(v) && v > 0.0)
-            throw(ArgumentError("greedy_allocation: ohat[$i] = $v must be finite and > 0 at index $i"))
-        end
-    end
+    (isfinite(sq) && sq <= 1.0 + PROB_TOL) || throw(ArgumentError("greedy_allocation: sum(q) = $sq > 1 + $PROB_TOL (index 1)"))
+    require_pos_finite(ohat, "greedy_allocation: ohat")
 
     n = length(q)
     order = sortperm(q .* ohat; rev=true)

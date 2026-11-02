@@ -28,10 +28,10 @@ end
 
 @testset "E1 (T-E1-1, T-E1-2)" begin
     # T-E1-1
-    viol, worst, kmax = E1Main.stress(; trials = QUICK ? 5_000 : 50_000)
+    viol, _, kmax = E1Main.stress(; trials = QUICK ? 5_000 : 50_000)
     @test viol == 0
     # L/D not tested: ill-conditioned for tiny D (seed 7, trial 22 420: D = 1.45e-9 → ratio error 1.3e-7); L ≤ D + 1e-10 is the bound
-    @test kmax ≤ 1e-10
+    @test kmax ≤ Kelly_KL.CERT_TOL
 
     # T-E1-2
     golden_csv = joinpath(@__DIR__, "golden", "e1_results.csv")
