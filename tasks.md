@@ -32,7 +32,7 @@ In `code/`, run `julia --version` and `python --version`; write both into the De
 ---
 
 ## Task 002: Initialize the git repository
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-01)
 **Milestone:** M0
 **Depends on:** 001
 
@@ -60,7 +60,7 @@ All three commands, run in `code/`, give the stated output:
 ---
 
 ## Task 003: Generate and tag the golden E1 outputs (original scripts, this machine)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-01)
 **Milestone:** M0
 **Depends on:** 002
 
@@ -69,7 +69,7 @@ Using the ORIGINAL, unmodified scripts in `code/` (no edits to any `.jl` file), 
 `julia e1_kl_growth_loss.jl` then `julia e1_plot.jl` (default environment; both use only the standard
 library). Save the full stdout of the first command to `code/test/golden/e1_summary_julia-1.12.1.txt`.
 Copy `code/e1_results.csv` to `code/test/golden/e1_results.csv` and `../img/e1_kl_growth_loss.svg` to
-`code/test/golden/e1_kl_growth_loss.svg` (byte copies). Commit with message
+`code/test/golden/e1_kl_growth_loss.svg` (byte copies). Stage everything with `git add -A` (regenerated `e1_results.csv`, golden files, `tasks.md`) and commit with message
 `test: golden E1 outputs from original scripts (Julia 1.12.1)` and create the annotated tag
 `git tag -a e1-original -m "Original E1 scripts and golden outputs, Julia 1.12.1"`.
 Then compare the printed summary table with the table in `code/E1_RESULTS.md` (Julia 1.13.3) and report
@@ -89,6 +89,14 @@ whether the numbers are identical; do NOT edit `E1_RESULTS.md` in this task.
 ### On Failure
 `TASK 003 FAILED — [which of 1–5] — [observed output] — [error text]`
 Also report, on pass or fail: `E1 1.12.1 vs 1.13.3 summary: [identical / differs: rows …]`.
+
+---
+
+**Result:** tag `e1-original`; summary on Julia 1.12.1 identical to the 1.13.3 run at printed precision.
+Cross-platform note (for M8 comparator): the Linux 1.13.3 CSV differs from the Windows golden CSV in the
+last printed digits of a few rows (e.g. loss 5.091292182553e-05 vs …561e-05: |Δ| ≈ 8e-17, relative ≈ 1.6e-12),
+because `loss` is a difference of two nearly equal growths. Non-reference-machine comparison must pass when
+|Δ| ≤ max(1e-12·|x|, 1e-15), i.e. relative OR absolute — not relative alone.
 
 ---
 

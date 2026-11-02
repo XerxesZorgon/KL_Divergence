@@ -51,6 +51,9 @@ resolver makes on Julia 1.12; no other changes without a dedicated task.
 `[compat]` in Project.toml uses caret bounds at these versions (e.g. `JuMP = "1.32.1"`) plus
 `julia = "1.12"`; the Manifest is the exact lock.
 
+### Resolver changes (Task 004)
+none
+
 ## Integration Checkpoints
 - **End of every milestone:** full `Pkg.test()` (non-quick), Aqua, and — from M1 on — T-E1-2 byte
   identity re-run. John reviews the diff summary before the next milestone starts.
