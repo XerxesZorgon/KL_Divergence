@@ -306,7 +306,7 @@ Add `include("test_certify.jl")` to `test/runtests.jl`. Stage with `git add -A` 
 ---
 
 ## Task 008: Exact allocations — full investment and greedy with cash
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02)
 **Milestone:** M1
 **Depends on:** 007
 
@@ -366,3 +366,52 @@ Add `include("test_exact.jl")` to `test/runtests.jl`. Stage with `git add -A` an
 
 ### On Failure
 `TASK 008 FAILED — [which of 1–4] — [failing test, seed, case index, expected vs got] — [error text]`
+
+**Result:** exact testset 11 002 Pass (T-ORC-1 greedy, T-ORC-2, multi-outcome certification, validation).
+
+---
+
+## Task 009: optimal_allocation dispatch for single events
+**Status:** [ ] Pending
+**Milestone:** M1
+**Depends on:** 008
+
+### What to do
+Create `code/src/optimize.jl`, include it from `src/Kelly_KL.jl` after `exact.jl`, export `optimal_allocation`.
+Implement:
+- `optimal_allocation(m::ScenarioModel; solver = :clarabel, tol = 1e-10)`:
+  - if `m.structure != :single_event`: throw `ArgumentError("structure :$(m.structure) requires the conic path (milestone M2)")`
+    (this branch is replaced in M2);
+  - validate single-event shape (`ArgumentError` naming the column): every non-cash column `j` has exactly one
+    positive entry, in scenario `s(j)`, and the `s(j)` are distinct;
+  - with `bets` = the non-cash column indices in order, `q = [m.π[s(j)] for j in bets]`,
+    `ohat = [m.X[s(j), j] for j in bets]`:
+    - `m.has_cash`: `a = greedy_allocation(q, ohat)`, `method = :greedy`;
+    - `!m.has_cash`: require `length(bets) == length(m.π)` (else `ArgumentError`), `a = full_investment_allocation(q)`,
+      `method = :full_investment`;
+  - return `certify(BetResult(m, a, method); tol)`. `solver` is accepted and ignored on these exact paths
+    (docstring says so).
+- `optimal_allocation(q, ohat; cash::Bool = true, tol = 1e-10) = optimal_allocation(single_event(q, ohat; cash); tol)`.
+Create `code/test/test_optimize.jl` with `@testset "optimize"` (StableRNG seeds 201–203):
+(a) seed 201, 1 000 random multi-outcome events built exactly as in Task 008's seed-103 family:
+`optimal_allocation(q, ohat).a == greedy_allocation(q, ohat)` (bitwise) and `assert_certified(r, single_event(q, ohat))`;
+(b) seed 202, 1 000 cases: `optimal_allocation(q, o; cash = false).a == q` and method `:full_investment`;
+(c) single bet as a general single-event model: `m = ScenarioModel([0.6, 0.4], [1.0 2.0; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :single_event)`
+gives `a ≈ [0.8, 0.2]` (atol 1e-15) and `method == :greedy`;
+(d) a model with `structure = :simultaneous` throws `ArgumentError`; a `:single_event` model whose bet column pays in
+two scenarios throws `ArgumentError`;
+(e) a deliberately wrong stored allocation raises through `certify`: `@test_throws CertificationError certify(BetResult(m, [0.9, 0.1], :greedy))` (m from (c)).
+Add `include("test_optimize.jl")` to `test/runtests.jl`. Stage with `git add -A` and commit with message
+`feat(optimize): certified optimal_allocation for single events`.
+
+### Files touched
+- `code/src/optimize.jl` — new; `code/src/Kelly_KL.jl` — include + export (one concern: solver dispatch)
+- `code/test/test_optimize.jl` — new; `code/test/runtests.jl` — include line
+
+### Acceptance Criterion
+1. `julia --project=. -e "using Pkg; Pkg.test()"` exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `optimize` shows ≥ 3 000 Pass, 0 Fail, 0 Error; all earlier testsets still 0 Fail;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 009 FAILED — [which of 1–3] — [failing test, seed, case index, expected vs got] — [error text]`

@@ -48,3 +48,4 @@ end
 
 optimal_allocation(q, ohat; cash::Bool = true, tol = 1e-10) =
     optimal_allocation(single_event(q, ohat; cash = cash); tol = tol)
+
