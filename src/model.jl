@@ -51,6 +51,27 @@ function single_event(q::AbstractVector{<:Real}, ohat::AbstractVector{<:Real}; c
     return ScenarioModel(q, X; assets = cash ? vcat(["cash"], outcome_names) : outcome_names, has_cash = cash, structure = :single_event)
 end
 
+function simultaneous_bets(p::AbstractVector{<:Real}, w::AbstractVector{<:Real}; cash::Bool = true)
+    n = length(p)
+    n == length(w) || throw(ArgumentError("simultaneous_bets: length(p)=$n != length(w)=$(length(w)) (index 1)"))
+    1 <= n <= 16 || throw(ArgumentError("simultaneous_bets: n = $n: n > 16 gives more than 65 536 scenarios"))
+    bad_p = findfirst(x -> !(isfinite(x) && 0.0 <= x <= 1.0), p)
+    bad_p === nothing || throw(ArgumentError("simultaneous_bets: p[$bad_p] = $(p[bad_p]) must be in [0, 1] at index $bad_p"))
+    require_pos_finite(w, "simultaneous_bets: w")
+    S = 1 << n
+    wins(s, k) = ((s - 1) >> (k - 1)) & 1 == 1
+    π = [prod(wins(s, k) ? Float64(p[k]) : 1.0 - Float64(p[k]) for k in 1:n) for s in 1:S]
+    X_bets = [wins(s, k) ? Float64(w[k]) : 0.0 for s in 1:S, k in 1:n]
+    X = cash ? hcat(ones(S), X_bets) : X_bets
+    bet_names = ["bet_$k" for k in 1:n]
+    return ScenarioModel(π, X; assets = cash ? vcat(["cash"], bet_names) : bet_names, has_cash = cash, structure = :simultaneous)
+end
+
+function correlated_bets(P_joint::AbstractVector{<:Real}, W::AbstractMatrix{<:Real})
+    S, n = size(W)
+    return ScenarioModel(P_joint, hcat(ones(S), W); assets = vcat(["cash"], ["bet_$k" for k in 1:n]), has_cash = true, structure = :correlated)
+end
+
 function payoffs_from_odds(o::AbstractVector{<:Real}; commission::Real = 0.0)
     length(o) >= 1 || throw(ArgumentError("payoffs_from_odds: empty odds vector (index 1)"))
     require_pos_finite(o, "payoffs_from_odds: o")

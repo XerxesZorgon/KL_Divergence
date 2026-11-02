@@ -638,7 +638,7 @@ In `docs/TEST_PLAN.md` row T-E1-1, delete `max L/D ≤ 1 + 1e-10; ` and append
 ---
 
 ## Task 015: Move E1_RESULTS.md, update run instructions and CHANGELOG
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02)
 **Milestone:** M1
 **Depends on:** 014
 
@@ -677,3 +677,75 @@ Stage with `git add -A` and commit with message `docs(e1): results moved to expe
 
 ### On Failure
 `TASK 015 FAILED — [which of 1–3] — [observed output] — [error text]`
+
+**Result:** reference `Pkg.test()` 24 072 Pass, 0 Fail/Error/Broken.
+
+**M1 complete (2026-11-02).** Gate met: Aqua, T-ORC-1 (greedy), T-ORC-2, T-E1-1, T-E1-2 (byte-identical), T-E1-3 green.
+Next: integration checkpoint + John's diff review, optional /refactor (model.jl validation loops), then M2 tasks.
+
+### /refactor (post-M1) — 2026-11-02, commit f199f72
+10 files, −197 lines, 0 blocked, tests green (reference run). Reviewed: frozen bodies/expressions intact
+(greedy body keeps the literal `1 - 1e-15`); validation condensed with rules, order, exception types and messages
+kept. Note: `RESERVE_TOL` is defined in `Kelly_KL.jl` but unused (the frozen greedy body keeps its literal) —
+remove it in Task 016.
+
+---
+
+# Milestone M2 — Simultaneous and correlated bets (conic + polish)
+
+Sequence (full task text is written when the previous task is green):
+016. `simultaneous_bets`, `correlated_bets` constructors (model.jl) — scenario layout tests
+017. `src/conic.jl` — JuMP + Clarabel exponential-cone program (SCS by keyword); raw accuracy tests
+018. `src/polish.jl` — Newton polish on the active set; reaches KKT ≤ 1e-10
+019. `optimal_allocation` general path + `method = :auto | :conic` keyword; certified
+020. `test/test_conic.jl` — T-ORC-1 (conic path), T-ORC-8 (greedy = conic), T-ERR-2 (parent two-bet example)
+021. `test/test_simultaneous.jl` — T-ORC-3 (L ≤ D beyond single events), T-ORC-5 (KKT on 500 conic problems)
+022. CHANGELOG for M2
+Gate: full `Pkg.test()` green incl. T-ORC-1 (conic), T-ORC-3, T-ORC-5, T-ORC-8, T-ERR-2.
+
+---
+
+## Task 016: Simultaneous and correlated bet constructors
+**Status:** [ ] Pending
+**Milestone:** M2
+**Depends on:** 015
+
+### What to do
+In `code/src/model.jl` add and export (from `src/Kelly_KL.jl`) `simultaneous_bets` and `correlated_bets`; delete the
+unused constant `RESERVE_TOL` from `src/Kelly_KL.jl`.
+- `simultaneous_bets(p, w; cash = true)`: independent binary bets k = 1..n with win probabilities `p ∈ [0,1]^n` and
+  **gross** payoffs `w > 0` (a winning unit stake returns w). Validate equal lengths, `1 ≤ n ≤ 16` (else `ArgumentError`
+  "n > 16 gives more than 65 536 scenarios"), `p` in [0, 1], `w` finite and > 0. Scenarios s = 1..2^n with
+  `wins(s, k) = ((s - 1) >> (k - 1)) & 1 == 1` (bet 1 is the least-significant bit);
+  `π_s = prod(wins(s,k) ? p[k] : 1 - p[k] for k in 1:n)`; `X[s, k] = wins(s,k) ? w[k] : 0.0` for the bet columns, with a
+  leading column of ones when `cash = true`. Assets `["cash"; "bet_1", …, "bet_n"]` (no `"cash"` when `cash = false`);
+  `structure = :simultaneous`.
+- `correlated_bets(P_joint, W)`: `P_joint` a length-S probability vector over joint scenarios, `W` an S × n table of gross
+  payoffs; `X = hcat(ones(S), W)`, assets `["cash"; "bet_1", …]`, `has_cash = true`, `structure = :correlated`.
+  All validation goes through the `ScenarioModel` constructor.
+Create `code/test/test_constructors.jl` with `@testset "constructors"`:
+(a) `m = simultaneous_bets([0.3, 0.25], [4.0, 6.0])`: `m.π ≈ [0.525, 0.225, 0.175, 0.075]` (atol 1e-15),
+`m.X == [1.0 0.0 0.0; 1.0 4.0 0.0; 1.0 0.0 6.0; 1.0 4.0 6.0]`, `m.assets == ["cash", "bet_1", "bet_2"]`, `m.structure == :simultaneous`;
+(b) seed 501 (StableRNG), 200 cases, n ∈ 1:8: `length(m.π) == 2^n`, `abs(sum(m.π) - 1) ≤ 1e-12`, and for each k the
+marginal `sum(m.π[s] for s in 1:2^n if m.X[s, k+1] > 0) ≈ p[k]` (atol 1e-12);
+(c) `simultaneous_bets([0.3], [4.0]; cash = false)` has `size(X) == (2, 1)` and throws `DomainError` (the losing scenario
+has no positive return) — `@test_throws DomainError`;
+(d) `simultaneous_bets(fill(0.5, 17), fill(2.0, 17))` throws `ArgumentError`;
+(e) `correlated_bets([0.5, 0.3, 0.2], [2.0 0.0; 0.0 3.0; 2.0 3.0])` has `X == [1.0 2.0 0.0; 1.0 0.0 3.0; 1.0 2.0 3.0]` and
+structure `:correlated`; `correlated_bets([0.5, 0.6], [2.0; 0.0;;])` throws `ArgumentError` (probabilities sum to 1.1).
+Add `include("test_constructors.jl")` to `test/runtests.jl` after `test_model.jl`. Stage with `git add -A` and commit
+with message `feat(model): simultaneous_bets and correlated_bets`.
+
+### Files touched
+- `code/src/model.jl`, `code/src/Kelly_KL.jl` (exports; remove `RESERVE_TOL`) — one concern: scenario constructors
+- `code/test/test_constructors.jl` — new; `code/test/runtests.jl` — include line
+
+### Acceptance Criterion
+1. Reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, then `julia --project=. -e "using Pkg; Pkg.test()"`)
+   exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `constructors` shows ≥ 600 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. `git grep -n RESERVE_TOL` prints nothing;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 016 FAILED — [which of 1–4] — [failing test, seed, case, expected vs got] — [error text]`
