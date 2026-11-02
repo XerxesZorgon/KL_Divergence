@@ -706,7 +706,7 @@ Gate: full `Pkg.test()` green incl. T-ORC-1 (conic), T-ORC-3, T-ORC-5, T-ORC-8, 
 ---
 
 ## Task 016: Simultaneous and correlated bet constructors
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02, commit 1f56a59)
 **Milestone:** M2
 **Depends on:** 015
 
@@ -728,8 +728,8 @@ Create `code/test/test_constructors.jl` with `@testset "constructors"`:
 `m.X == [1.0 0.0 0.0; 1.0 4.0 0.0; 1.0 0.0 6.0; 1.0 4.0 6.0]`, `m.assets == ["cash", "bet_1", "bet_2"]`, `m.structure == :simultaneous`;
 (b) seed 501 (StableRNG), 200 cases, n ∈ 1:8: `length(m.π) == 2^n`, `abs(sum(m.π) - 1) ≤ 1e-12`, and for each k the
 marginal `sum(m.π[s] for s in 1:2^n if m.X[s, k+1] > 0) ≈ p[k]` (atol 1e-12);
-(c) `simultaneous_bets([0.3], [4.0]; cash = false)` has `size(X) == (2, 1)` and throws `DomainError` (the losing scenario
-has no positive return) — `@test_throws DomainError`;
+(c) `@test_throws DomainError simultaneous_bets([0.3], [4.0]; cash = false)` (the losing scenario has no positive
+return, so every allocation risks total loss);
 (d) `simultaneous_bets(fill(0.5, 17), fill(2.0, 17))` throws `ArgumentError`;
 (e) `correlated_bets([0.5, 0.3, 0.2], [2.0 0.0; 0.0 3.0; 2.0 3.0])` has `X == [1.0 2.0 0.0; 1.0 0.0 3.0; 1.0 2.0 3.0]` and
 structure `:correlated`; `correlated_bets([0.5, 0.6], [2.0; 0.0;;])` throws `ArgumentError` (probabilities sum to 1.1).
@@ -749,3 +749,80 @@ with message `feat(model): simultaneous_bets and correlated_bets`.
 
 ### On Failure
 `TASK 016 FAILED — [which of 1–4] — [failing test, seed, case, expected vs got] — [error text]`
+
+**Result:** constructors testset 1 296 Pass; suite 25 361 Pass. Criterion 3 as written also matched this file's own
+task text; the intent (no `RESERVE_TOL` in code or tests) is met. Later grep criteria exclude `tasks.md`.
+
+---
+
+## Task 017: Conic log-optimal solver (JuMP + Clarabel; SCS by keyword)
+**Status:** [ ] Pending
+**Milestone:** M2
+**Depends on:** 016
+
+### What to do
+In `code/src/Kelly_KL.jl` add `using JuMP`, `import Clarabel, SCS` and `const MOI = JuMP.MOI`, and include a new file
+`code/src/conic.jl` after `exact.jl` (internal, not exported). Implement `solve_conic(m::ScenarioModel; solver = :clarabel)`:
+```julia
+function solve_conic(m::ScenarioModel; solver::Symbol = :clarabel)
+    solver in (:clarabel, :scs) || throw(ArgumentError("solver must be :clarabel or :scs, got :$solver"))
+    S, J = size(m.X)
+    pos = findall(>(0.0), m.π)                       # scenarios with π_s = 0 are excluded
+    model = JuMP.Model(solver === :clarabel ? Clarabel.Optimizer : SCS.Optimizer)
+    JuMP.set_silent(model)
+    @variable(model, a[1:J] >= 0)
+    @variable(model, t[1:length(pos)])
+    @constraint(model, sum(a) == 1)
+    for (k, s) in enumerate(pos)
+        @constraint(model, [t[k], 1.0, sum(m.X[s, j] * a[j] for j in 1:J)] in MOI.ExponentialCone())  # t_s ≤ log V_s(a)
+    end
+    @objective(model, Max, sum(m.π[s] * t[k] for (k, s) in enumerate(pos)))
+    JuMP.optimize!(model)
+    st = JuMP.termination_status(model)
+    st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) || throw(SolverError(string(st), "conic solve failed (:$solver)"))
+    a_val = max.(JuMP.value.(a), 0.0)
+    return a_val ./ sum(a_val)
+end
+```
+Solver default settings (DESIGN §5.3). The raw result is NOT certified here — polishing (Task 018) and certification
+(Task 019) follow. Create `code/test/test_conic_raw.jl` with `@testset "conic (raw)"`:
+(a) seed 601 (StableRNG), 200 random single events with cash built as Task 008's seed-103 family:
+`maximum(abs.(solve_conic(single_event(q, ohat)) .- greedy_allocation(q, ohat))) ≤ 1e-4`;
+(b) `a = solve_conic(simultaneous_bets([0.3, 0.25], [4.0, 6.0]))`: `abs(a[2] - 0.06450023) ≤ 1e-4` and `abs(a[3] - 0.09915443) ≤ 1e-4`;
+(c) same as (b) with `solver = :scs`, tolerance 1e-3;
+(d) zero-probability rows are excluded: `m = ScenarioModel([0.5, 0.5, 0.0], [2.0 0.0; 0.0 3.0; 0.0 0.0]; assets = ["b1", "b2"], has_cash = false, structure = :correlated)`;
+`maximum(abs.(solve_conic(m) .- [0.5, 0.5])) ≤ 1e-4`;
+(e) `solve_conic(m; solver = :foo)` throws `ArgumentError`.
+(Prototype, Python cvxpy + Clarabel 0.11.1, 500 random simultaneous/correlated problems: raw allocation error vs the
+polished optimum median 5.8e-6, max 5.2e-5; 2.4 s total. Hence 1e-4 here, 1e-10 only after polishing.)
+Add `include("test_conic_raw.jl")` to `test/runtests.jl`. Stage with `git add -A` and commit with message
+`feat(conic): exponential-cone log-optimal solver (Clarabel, SCS)`.
+
+### Files touched
+- `code/src/conic.jl` — new; `code/src/Kelly_KL.jl` — using/import + include (one concern: conic solver)
+- `code/test/test_conic_raw.jl` — new; `code/test/runtests.jl` — include line
+
+### Acceptance Criterion
+1. Reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, then `julia --project=. -e "using Pkg; Pkg.test()"`)
+   exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `conic (raw)` shows ≥ 205 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken
+   (Aqua included — report any ambiguity or piracy finding verbatim);
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 017 FAILED — [which of 1–3] — [failing test, case, max abs error or solver status] — [error text]`
+
+**Attempt 1 (2026-11-02): FAILED** — (a) seed 601, trial 25 (n = 3): raw Clarabel allocation error 1.016e-4 > 1e-4;
+(b)–(e) and the other 199 cases pass. Diagnosis (reproduced in Python): a near-marginal bet (expected return
+q·ô = 0.99943, just above the reserve rate R = 0.74389·… threshold path) makes the growth surface nearly flat, so an
+interior-point solution that is optimal to 4.6e-10 in growth can sit 1e-4 away in allocation. Allocation distance is
+the wrong yardstick for a raw solve; the growth gap is the well-conditioned one. Spec error, not a code bug.
+
+### Fix 017a
+In `code/test/test_conic_raw.jl` part (a), replace the allocation assertion with two assertions per case:
+`m = single_event(q, ohat); a_c = solve_conic(m); a_g = greedy_allocation(q, ohat)`;
+`@test growth(m, a_g) - growth(m, a_c) ≤ 1e-8` (growth gap — the raw solver's real accuracy) and
+`@test maximum(abs.(a_c .- a_g)) ≤ 1e-3` (coarse allocation check), with the comment
+`# allocation distance is ill-conditioned near marginal bets (seed 601, trial 25: 1.0e-4 apart, growth gap 4.6e-10)`.
+Leave (b)–(e) unchanged. Rerun the reference suite and commit as in Task 017.
+Acceptance: as Task 017, with testset `conic (raw)` ≥ 405 Pass, 0 Fail, 0 Error.

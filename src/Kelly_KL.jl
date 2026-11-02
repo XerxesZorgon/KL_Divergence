@@ -1,6 +1,10 @@
 module Kelly_KL
 
 using LinearAlgebra
+using JuMP
+import Clarabel, SCS
+
+const MOI = JuMP.MOI
 
 export ScenarioModel, single_event, simultaneous_bets, correlated_bets, payoffs_from_odds, growth
 export BetResult, CertificationError, SolverError, kkt_residual, certify
@@ -15,6 +19,7 @@ const VALID_STRUCTURES = (:single_event, :simultaneous, :correlated, :sampled, :
 include("model.jl")
 include("certify.jl")
 include("exact.jl")
+include("conic.jl")
 include("optimize.jl")
 include("diagnostics.jl")
 include("crosscheck.jl")

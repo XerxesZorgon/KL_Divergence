@@ -34,3 +34,4 @@ using StableRNGs, Random
     @test mc.structure == :correlated
     @test_throws ArgumentError correlated_bets([0.5, 0.6], [2.0; 0.0;;])
 end
+
