@@ -1,0 +1,11 @@
+E1 summary  (seed = 20261101, 18000 trials)
+case                   trials     max|L−D|    L≤D (%) median L/D    max L/D G_p(a_q)<0
+A_full_investment        3000     3.33e-16      100.0      1.000      1.000     1146
+A2_full_inv_fees         3000     2.78e-16      100.0      1.000      1.000     2976
+B_cash                   3000     2.01e-15      100.0      1.000      1.000     1141
+B2_cash_margin           3000     1.87e-01      100.0      0.799      1.000     1326
+C_cash_margin_fee        3000     1.79e-01      100.0      0.692      1.000     1399
+D_cash_superfair         3000     1.11e-15      100.0      1.000      1.000      536
+worst KKT residual: 1.33e-15  (≤ ~1e-12 means every allocation is optimal)
+wrote C:\Users\johnx\Documents\WildPeaches\Projects\extended-kelly-KL\code\e1_results.csv
+stress: 50000 trials, violations of L ≤ D: 0, max L/D = 1.000000, worst KKT = 4.09e-12
