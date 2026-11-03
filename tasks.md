@@ -2447,7 +2447,7 @@ Sequence (full task text is written when the previous task is green; each experi
 ---
 
 ## Task 042: Shared plotting helpers (`experiments/plotting.jl`)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-03)
 **Milestone:** M6
 **Depends on:** 041
 
@@ -2480,3 +2480,48 @@ Stage with `git add -A` and commit with message `feat(experiments): shared plott
 
 ### On Failure
 `TASK 042 FAILED — [which of 1–3] — [failing test / first differing SVG line] — [error text]`
+
+**Result:** plotting helpers 11 Pass; E1 SVG byte-identical; QUICK suite 39 005 Pass.
+
+---
+
+## Task 043: E2 — holdout log score vs ΔKL
+**Status:** [x] Done (2026-11-03)
+**Milestone:** M6
+**Depends on:** 042
+
+### What to do
+`code/experiments/e2_logscore.jl` has been placed in the folder by Claude (untracked; prototyped 2026-11-03 with the logic run on
+Xoshiro: coverage 0.9560 over 1 000 replications; an earlier 4 000-replication prototype gave 0.9458 / 0.9583 / 0.9528 at
+n = 100 / 500 / 2 000). Use it as-is. Per replication: K ∈ 3:10 outcomes, truth p, models π1 (tilt σ = 0.3) and π2 (σ = 0.6),
+n = 500 held-out outcomes; `logscore_difference(π1, π2, y)` vs the true ΔKL; covered if within ±2 SE. Outputs
+`output/e2_logscore.csv`, `output/e2_logscore.svg` (+ copy to `../img/` unless `quick`), `output/e2_meta.toml`.
+**TEST_PLAN amendment:** in `docs/TEST_PLAN.md` §G, replace the E2 criterion with: "share of 1 000 replications whose ±2 SE
+interval covers the true ΔKL lies within 3 binomial SE of the normal-theory 95.45% (i.e. 93.47–97.43%) — Task 043: '≥ 95%' would
+fail about 1 run in 10 by chance (binomial SE 0.66%)".
+Run from `code/`: `julia --project=. experiments/e2_logscore.jl`.
+Stage with `git add -A` (the generated `experiments/output/` is git-ignored) and commit with message `feat(experiments): E2 — log score estimates ΔKL`.
+
+### Files touched
+- `code/experiments/e2_logscore.jl` — new (provided); `code/docs/TEST_PLAN.md` §G E2 row (one concern: experiment E2)
+
+### Acceptance Criterion
+1. The run exits 0 and prints a line starting `E2: coverage of ±2 SE =` ending in `PASS`; report the coverage;
+2. `experiments/output/e2_logscore.csv` has 1 001 lines; `experiments/output/e2_logscore.svg` and `../img/e2_logscore.svg` exist;
+   `experiments/output/e2_meta.toml` contains `pass = true`;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 043 FAILED — [which of 1–3] — [printed coverage line] — [error text]`
+
+**Result:** coverage of ±2 SE = 0.9480 (nominal 0.9545 ± 0.0198 over 1 000 replications) → PASS.
+
+---
+
+## Task 044: E3 — model averaging vs the best single model
+**Status:** [x] Done (2026-11-03)
+**Milestone:** M6
+**Depends on:** 043
+
+**Result:** mean advantages 0.015392 nats (n = 10, SE 0.000999, BMA ahead 74.0%), 0.006244 nats (n = 50, SE 0.000573, BMA ahead 71.4%), 0.001658 nats (n = 200, SE 0.000169, BMA ahead 72.5%) → PASS.
+
