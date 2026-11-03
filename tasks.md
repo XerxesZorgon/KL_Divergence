@@ -2039,7 +2039,7 @@ Stage with `git add -A` and commit with message `feat(robust): kl_robust_allocat
 ---
 
 ## Task 037: Wasserstein worst case for a fixed bet — exact breakpoint scan + LP oracle (T-ORC-9 ii)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-03)
 **Milestone:** M5
 **Depends on:** 036
 
@@ -2103,12 +2103,10 @@ Add to `code/test/test_robust.jl` a new `@testset "robust: Wasserstein worst cas
 `a` normalized `randexp(rng, n + 1)`; `ε = exp(log(1e-3) + rand(rng) * (log(3.0) - log(1e-3)))`;
 `(v, λ, Q) = wasserstein_worst_case(m, a, ε; unseen)`; `@test abs(v - wasserstein_inner_lp(m, a, ε; unseen)) ≤ 1e-7`;
 `@test abs(sum(Q) - 1) ≤ 1e-12`; `@test abs(sum(Q .* log.(vcat(m.X, unseen) * a)) - v) ≤ 1e-12`.
-(b) **Unseen catastrophe:** `m = correlated_bets([0.5, 0.5], [3.0; 0.0;;])`, `a = [0.8, 0.2]`, `unseen = [1.0 0.0]` (identical to
-the losing row, so cost 0 from row 2): value equals the KL-free nominal growth (moving to an identical row changes nothing);
-with `unseen = [0.5 0.0]` (cash halves — not a valid gross return for cash, so instead use a catastrophe for the bet:
-`m = correlated_bets([0.5, 0.5], [3.0 0.0; 0.0 2.0])`, `a = [0.2, 0.4, 0.4]`, `unseen = [1.0 0.0 0.0]` — both bets lose):
-`wasserstein_worst_case(m, a, 10.0; unseen)[1] ≈ log(0.2)` (atol 1e-12; a large budget moves all mass to the catastrophe) and
-`wasserstein_worst_case(m, a, 0.0; unseen)[1] ≈ 0.5 * log(1.4) + 0.5 * log(1.0)` (atol 1e-12; ε = 0 is nominal).
+(b) **Unseen catastrophe:** `m = correlated_bets([0.5, 0.5], [3.0 0.0; 0.0 2.0])` (X = [1 3 0; 1 0 2]), `a = [0.2, 0.4, 0.4]`
+(V = [1.4, 1.0]), `unseen = [1.0 0.0 0.0]` (both bets lose; V = 0.2): `@test abs(wasserstein_worst_case(m, a, 0.0; unseen)[1] - (0.5 * log(1.4) + 0.5 * log(1.0))) ≤ 1e-12`
+(ε = 0 is nominal) and `@test abs(wasserstein_worst_case(m, a, 10.0; unseen)[1] - log(0.2)) ≤ 1e-12` (moving all mass to the
+catastrophe costs 0.5·3 + 0.5·2 = 2.5 ≤ 10). The KL ball cannot do this: `kl_worst_case` never puts mass on the unseen row.
 (c) **L∞ cost and a user matrix** run without error and match `wasserstein_inner_lp` with the same `cost` within 1e-7 on one case each.
 (d) **Validation:** `unseen` with the wrong number of columns, a negative entry, `ε = -1`, and a bet with `Xt * a` not positive each throw `ArgumentError`.
 Stage with `git add -A` and commit with message `feat(robust): wasserstein_worst_case (exact breakpoint scan) + LP oracle (T-ORC-9 ii)`.
@@ -2125,3 +2123,100 @@ Stage with `git add -A` and commit with message `feat(robust): wasserstein_worst
 
 ### On Failure
 `TASK 037 FAILED — [which of 1–3] — [part, seed, case, breakpoint value vs LP] — [error text]`
+
+**Result:** 188 Pass; QUICK suite 38 745 Pass.
+
+---
+
+### Task 038 prototype findings (2026-11-03) — decision needed before writing the task
+150 random Wasserstein-robust problems (S 3–19, J ≤ 6, 0–3 unseen rows, ε 1e-3–2), joint conic program (ADR-006) solved by
+cvxpy/Clarabel as the start:
+- **Structure iteration** (polish the bet under the current worst case Q, recompute the exact worst case, repeat): converged in
+  ≤ 2 iterations on 126/150 (84%): KKT under Q* ≤ 1.2e-14, values within 2.5e-8 of the conic. Every support row must stay in
+  the feasibility check while polishing (a row with Q = 0 can still receive mass) — done with a 1e-300 weight floor.
+- **Degenerate saddles (24/150, 16%)**: ties in the worst-case transport make the iteration cycle between structures. Mixing
+  two structures (convex 1-D search) does not close the gap (up to 0.038). A full active-pair Newton (DESIGN §5.9) was
+  prototyped: it fails when λ* = 0 or when ties need a specific split of the transport plan — more research needed.
+- **Duality-gap certificate**: transport plan from the conic dual variables → Q in the ball → upper bound
+  U = max_a E_Q[log V] (≥ robust value); lower bound L = exact worst case of the bet (Task 037). Gap U − L: median 3e-9,
+  90th percentile 1.1e-8, max 5.0e-8 on all 150 cases.
+
+**Decision (John, 2026-11-03): two-tier certificate.** Certify at 1e-10 (KKT under the exact worst case) when the structure
+iteration converges; otherwise certify by the duality gap (upper bound from the conic dual transport plan, lower bound from
+the exact worst case) at ≤ 1e-7, flagged in the result. Documented as an exception in SDD and ADR-006 (Task 039).
+
+---
+
+## Task 038: Wasserstein-robust bet with a two-tier certificate — T-ORC-9 (i), T-ORC-10 (W), T-ORC-11
+**Status:** [ ] Pending
+**Milestone:** M5
+**Depends on:** 037
+
+### What to do
+1. Add a field `certificate::Symbol` (last field) to `RobustResult` — `:kkt` (saddle point verified, residual in `kkt` ≤ tol)
+   or `:duality_gap` (Wasserstein only; `kkt` holds the gap U − L ≤ `gap_tol`). Update every `RobustResult(...)` call in
+   `kl_robust_allocation` to pass `:kkt`.
+2. Internal `wasserstein_robust_conic(m, ε, Xs, Xt, C, p; solver = :clarabel)` → `(a, Γ)`: the joint program of ADR-006
+   (variables `a ≥ 0`, `λ ≥ 0`, `u[s]`; `sum(a) == 1`; constraint `con[s, t]`: `[u[s] - λ * C[s, t], 1.0, dot(Xt[t, :], a)] ∈ MOI.ExponentialCone()`;
+   maximize `sum(p .* u) - λ * ε`); `SolverError` on a bad status; `a = max.(value.(a), 0) ./ sum(…)`. Transport plan from the
+   duals: `Γ[s, t] = abs(JuMP.dual(con[s, t])[1])`, then rescale each row to sum to `p[s]` (a row of zeros becomes `p[s]` on its
+   own column t = s), then if `sum(Γ .* C) > ε` shrink toward the identity plan: `θ = ε / sum(Γ .* C)`,
+   `Γ = θ .* Γ .+ (1 - θ) .* I0` where `I0[s, s] = p[s]` (an S × T matrix, zero elsewhere).
+3. Export `wasserstein_robust_allocation(m, ε; unseen = zeros(0, size(m.X, 2)), cost = :l1, solver = :clarabel, tol = CERT_TOL, gap_tol = 1e-7)`:
+   with `(Xs, Xt, C, p) = wasserstein_support(m, unseen, cost)`; validate `ε ≥ 0`.
+   - `ε == 0`: `r = optimal_allocation(m; solver, tol)`; return `RobustResult(r.a, r.growth, r.growth, Inf, p, Xs, r.kkt, :wasserstein, 0.0, :kkt)`.
+   - `(a0, Γ) = wasserstein_robust_conic(…)`.
+   - **Tier 1 — structure iteration** (prototype: converged in ≤ 2 iterations on 84% of 150 cases, KKT ≤ 1.2e-14):
+     ```julia
+     wc(a) = wasserstein_worst_case(m, a, ε; unseen, cost)
+     a = copy(a0); Q = wc(a)[3]; tried = [copy(a0)]
+     for _ in 1:10
+         a = polish_log_optimal(Xt, max.(Q, 1e-300), a; tol)[1]   # 1e-300 floor keeps every support row feasible
+         push!(tried, copy(a))
+         v, λ, Qn = wc(a)
+         if maximum(abs.(Qn .- Q)) ≤ 1e-12
+             act = Qn .> 0
+             ρ = kkt_residual(Xt[act, :], a, Qn[act])
+             ρ ≤ tol && return RobustResult(a, v, growth(m, a), λ, Qn, Xt, ρ, :wasserstein, ε, :kkt)
+             break
+         end
+         Q = Qn
+     end
+     ```
+   - **Tier 2 — duality gap** (prototype: gap ≤ 5.0e-8 on all 150 cases): `Qd = vec(sum(Γ, dims = 1))`;
+     `mQ = ScenarioModel(Qd, Xt; assets = m.assets, has_cash = m.has_cash && all(==(1.0), Xt[:, 1]), structure = :correlated)`;
+     `U = optimal_allocation(mQ; solver, tol).growth` (an upper bound on the robust value: Qd lies in the ball);
+     `a = argmax over tried of wc(b)[1]`; `(L, λ, Qw) = wc(a)`; `gap = U - L`; `gap ≤ gap_tol` (and `gap ≥ -1e-12`) or throw
+     `CertificationError(gap, gap_tol, :wasserstein, "duality gap")`; return `RobustResult(a, L, growth(m, a), λ, Qw, Xt, gap, :wasserstein, ε, :duality_gap)`.
+   Docstring: maximizes worst-case growth when an adversary may move mass (including onto `unseen` scenarios) at transport
+   cost ≤ ε; tied worst cases are certified by a duality gap ≤ `gap_tol` instead of a KKT residual (ADR-006, exception).
+Add to `code/test/test_robust.jl` a new `@testset "robust: Wasserstein-robust bet (T-ORC-9 i, T-ORC-10, T-ORC-11)"` (StableRNG):
+(a) **T-ORC-9 (i) and certificates**, seed 2101, `QUICK ? 30 : 100` models (Task 037 (a) generator with `S = rand(rng, 3:19)`,
+`n = rand(rng, 1:5)`, `ε = exp(log(1e-3) + rand(rng) * (log(2.0) - log(1e-3)))`): `r = wasserstein_robust_allocation(m, ε; unseen)`;
+`@test abs(r.worst_case_growth - wasserstein_worst_case(m, r.a, ε; unseen)[1]) ≤ 1e-10`;
+`@test r.certificate == :kkt ? r.kkt ≤ 1e-10 : (r.certificate == :duality_gap && r.kkt ≤ 1e-7)`;
+for 5 random bets `b` (normalized `randexp`): `@test wasserstein_worst_case(m, b, ε; unseen)[1] ≤ r.worst_case_growth + (r.certificate == :kkt ? 1e-10 : 1e-7)`.
+Count the tiers.
+(b) **T-ORC-10 (W):** seed 2102, 20 models: `wasserstein_robust_allocation(m, 0.0).a` equals `optimal_allocation(m).a` within 1e-9.
+(c) **T-ORC-11 (unseen catastrophe forces cash):** `m = correlated_bets([0.5, 0.5], [3.0 0.0; 0.0 2.0])`, `unseen = [1.0 0.0 0.0]`
+(both bets lose): `@test optimal_allocation(m).a[1] ≤ 1e-12` (Kelly holds no cash: [0, 0.5, 0.5]); for `ε ∈ (0.01, 1.0)`:
+`r = wasserstein_robust_allocation(m, ε; unseen)`, `@test r.a[1] > 0` (any reachable total loss forces a cash reserve) and
+`@test isfinite(r.worst_case_growth)`; and the KL-robust bet cannot see the catastrophe: `kl_robust_allocation(m, ε).a[1] ≤ 1e-9`
+whenever `kl_cash_radius(m)[1] > ε`.
+(d) **KL results carry `:kkt`:** `kl_robust_allocation(correlated_bets([0.6, 0.4], [2.0; 0.0;;]), 0.01).certificate == :kkt`.
+Stage with `git add -A` and commit with message `feat(robust): wasserstein_robust_allocation with two-tier certificate (T-ORC-9, T-ORC-10, T-ORC-11)`.
+
+### Files touched
+- `code/src/robust.jl`, `code/src/Kelly_KL.jl` (export) — one concern: Wasserstein-robust bet (plus the `certificate` field)
+- `code/test/test_robust.jl` — new testset (and any existing `RobustResult` field checks if affected)
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `robust: Wasserstein-robust bet (T-ORC-9 i, T-ORC-10, T-ORC-11)` shows ≥ 230 Pass, 0 Fail, 0 Error; every other
+   testset 0 Fail / 0 Error / 0 Broken;
+3. report: number of (a) models certified `:kkt` vs `:duality_gap`, the largest gap, and the testset wall time;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 038 FAILED — [which of 1–4] — [part, seed, case, ε, certificate, kkt/gap, solver status] — [error text]`

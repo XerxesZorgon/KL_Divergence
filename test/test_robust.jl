@@ -208,4 +208,65 @@ end
     @test_throws ArgumentError wasserstein_worst_case(m_b, [0.0, 0.5, 0.5], 0.5; unseen = unseen_b)
 end
 
+@testset "robust: Wasserstein-robust bet (T-ORC-9 i, T-ORC-10, T-ORC-11)" begin
+    # (a) T-ORC-9 (i) and certificates, seed 2101
+    rng = StableRNG(2101)
+    N_a = QUICK ? 30 : 100
+    n_kkt = 0
+    n_gap = 0
+    max_gap = 0.0
+    for _ in 1:N_a
+        S = rand(rng, 3:19)
+        n = rand(rng, 1:5)
+        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
+        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
+        m = correlated_bets(π, W)
+        T0 = rand(rng, 0:3)
+        unseen = hcat(ones(T0), [rand(rng) < 0.3 ? 1 + 4 * rand(rng) : 0.0 for t in 1:T0, k in 1:n])
+        ε = exp(log(1e-3) + rand(rng) * (log(2.0) - log(1e-3)))
+        r = wasserstein_robust_allocation(m, ε; unseen)
+        @test abs(r.worst_case_growth - wasserstein_worst_case(m, r.a, ε; unseen)[1]) ≤ 1e-10
+        @test r.certificate == :kkt ? r.kkt ≤ 1e-10 : (r.certificate == :duality_gap && r.kkt ≤ 1e-7)
+        if r.certificate == :kkt
+            n_kkt += 1
+        elseif r.certificate == :duality_gap
+            n_gap += 1
+            max_gap = max(max_gap, r.kkt)
+        end
+        J = size(m.X, 2)
+        for _ in 1:5
+            xb = randexp(rng, J); b = xb ./ sum(xb)
+            @test wasserstein_worst_case(m, b, ε; unseen)[1] ≤ r.worst_case_growth + (r.certificate == :kkt ? 1e-10 : 1e-7)
+        end
+    end
+    println("wasserstein_robust_allocation (a): :kkt = $n_kkt, :duality_gap = $n_gap, max_gap = $max_gap")
+
+    # (b) T-ORC-10 (W): seed 2102, 20 models
+    rng = StableRNG(2102)
+    for _ in 1:20
+        S = rand(rng, 3:19)
+        n = rand(rng, 1:5)
+        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
+        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
+        m = correlated_bets(π, W)
+        @test maximum(abs.(wasserstein_robust_allocation(m, 0.0).a .- optimal_allocation(m).a)) ≤ 1e-9
+    end
+
+    # (c) T-ORC-11 (unseen catastrophe forces cash)
+    m_c = correlated_bets([0.5, 0.5], [3.0 0.0; 0.0 2.0])
+    unseen_c = [1.0 0.0 0.0]
+    @test optimal_allocation(m_c).a[1] ≤ 1e-12
+    for ε in (0.01, 1.0)
+        r = wasserstein_robust_allocation(m_c, ε; unseen = unseen_c)
+        @test r.a[1] > 0
+        @test isfinite(r.worst_case_growth)
+    end
+    @test kl_cash_radius(m_c)[1] == Inf
+    @test kl_robust_allocation(m_c, 0.01).a[1] ≤ 1e-9
+
+    # (d) KL results carry :kkt
+    @test kl_robust_allocation(correlated_bets([0.6, 0.4], [2.0; 0.0;;]), 0.01).certificate == :kkt
+end
+
+
 

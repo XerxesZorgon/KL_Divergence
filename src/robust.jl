@@ -8,6 +8,7 @@ struct RobustResult
     kkt::Float64
     ball::Symbol
     ε::Float64
+    certificate::Symbol
 end
 
 function _validate_kl_inner_inputs(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real, name::AbstractString)
@@ -174,7 +175,7 @@ function kl_robust_allocation(m::ScenarioModel, ε::Real; solver::Symbol = :clar
     pos = findall(>(0.0), m.π); p = m.π[pos]; Xp = m.X[pos, :]; J = size(m.X, 2); εf = Float64(ε)
     if εf == 0.0
         r = optimal_allocation(m; solver, tol)
-        return RobustResult(r.a, r.growth, r.growth, Inf, p, Xp, r.kkt, :kl, 0.0)
+        return RobustResult(r.a, r.growth, r.growth, Inf, p, Xp, r.kkt, :kl, 0.0, :kkt)
     end
     if m.has_cash
         (D_min, Qc) = kl_cash_radius(m)
@@ -182,7 +183,7 @@ function kl_robust_allocation(m::ScenarioModel, ε::Real; solver::Symbol = :clar
             a = [1.0; zeros(J - 1)]
             ρ = kkt_residual(Xp, a, Qc)
             ρ ≤ tol || throw(CertificationError(ρ, tol, :kl, "cash certificate"))
-            return RobustResult(a, 0.0, 0.0, 0.0, Qc, Xp, ρ, :kl, εf)
+            return RobustResult(a, 0.0, 0.0, 0.0, Qc, Xp, ρ, :kl, εf, :kkt)
         end
     end
     (a, λ0) = kl_robust_conic(m, εf; solver)
@@ -206,13 +207,13 @@ function kl_robust_allocation(m::ScenarioModel, ε::Real; solver::Symbol = :clar
     ρ ≤ tol || throw(CertificationError(ρ, tol, :kl, "saddle-point KKT residual $ρ > $tol"))
     d_err = abs(kl(Q, p) - εf)
     d_err ≤ tol || throw(CertificationError(d_err, tol, :kl, "KL boundary residual $d_err > $tol"))
-    return RobustResult(a, sum(Q .* log.(V)), growth(m, a), λ, Q, Xp, ρ, :kl, εf)
+    return RobustResult(a, sum(Q .* log.(V)), growth(m, a), λ, Q, Xp, ρ, :kl, εf, :kkt)
 end
 
 function wasserstein_support(m::ScenarioModel, unseen, cost)
-    unseen isa AbstractMatrix{<:Real} || throw(ArgumentError("unseen must be a real matrix"))
+    unseen isa AbstractMatrix || throw(ArgumentError("unseen must be a matrix"))
     size(unseen, 2) == size(m.X, 2) || throw(ArgumentError("size(unseen, 2) = $(size(unseen, 2)) != size(m.X, 2) = $(size(m.X, 2))"))
-    all(x -> isfinite(x) && x ≥ 0.0, unseen) || throw(ArgumentError("unseen entries must be finite and ≥ 0"))
+    all(x -> x isa Real && isfinite(x) && x ≥ 0.0, unseen) || throw(ArgumentError("unseen entries must be finite and ≥ 0"))
     pos = findall(>(0.0), m.π)
     Xs = m.X[pos, :]
     p = m.π[pos]
@@ -310,5 +311,85 @@ function wasserstein_inner_lp(m::ScenarioModel, a::AbstractVector{<:Real}, ε::R
     st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) || throw(SolverError(string(st), "wasserstein_inner_lp solve failed"))
     return JuMP.objective_value(model)
 end
+
+function wasserstein_robust_conic(m::ScenarioModel, ε::Real, Xs::Matrix{Float64}, Xt::Matrix{Float64},
+                                  C::Matrix{Float64}, p::Vector{Float64}; solver::Symbol = :clarabel)
+    solver in (:clarabel, :scs) || throw(ArgumentError("solver must be :clarabel or :scs, got :$solver"))
+    S, T = size(C); J = size(m.X, 2)
+    model = JuMP.Model(solver === :clarabel ? Clarabel.Optimizer : SCS.Optimizer)
+    JuMP.set_silent(model)
+    @variable(model, a[1:J] >= 0)
+    @variable(model, λ >= 0)
+    @variable(model, u[1:S])
+    @constraint(model, sum(a) == 1)
+    @constraint(model, con[s = 1:S, t = 1:T],
+                [u[s] - λ * C[s, t], 1.0, sum(Xt[t, j] * a[j] for j in 1:J)] in MOI.ExponentialCone())
+    @objective(model, Max, sum(p[s] * u[s] for s in 1:S) - λ * Float64(ε))
+    JuMP.optimize!(model)
+    st = JuMP.termination_status(model)
+    st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) || throw(SolverError(string(st), "wasserstein_robust_conic solve failed (:$solver)"))
+    a_val = max.(JuMP.value.(a), 0.0)
+    a_val ./= sum(a_val)
+    Γ = [abs(JuMP.dual(con[s, t])[1]) for s in 1:S, t in 1:T]
+    for s in 1:S
+        rs = sum(@view(Γ[s, :]))
+        if rs > 0.0
+            Γ[s, :] .*= p[s] / rs
+        else
+            Γ[s, s] = p[s]
+        end
+    end
+    cost_Γ = sum(Γ .* C)
+    if cost_Γ > ε
+        θ = Float64(ε) / cost_Γ
+        I0 = zeros(S, T)
+        for s in 1:S; I0[s, s] = p[s]; end
+        Γ = θ .* Γ .+ (1 - θ) .* I0
+    end
+    return (a_val, Γ)
+end
+
+"""
+    wasserstein_robust_allocation(m::ScenarioModel, ε; unseen = zeros(0, size(m.X, 2)), cost = :l1, solver = :clarabel, tol = CERT_TOL, gap_tol = 1e-7) -> RobustResult
+
+Maximizes worst-case growth when an adversary may move mass (including onto `unseen` scenarios)
+at transport cost `≤ ε`; tied worst cases are certified by a duality gap `≤ gap_tol` instead of
+a KKT residual (ADR-006, exception).
+"""
+function wasserstein_robust_allocation(m::ScenarioModel, ε::Real;
+                                       unseen = zeros(0, size(m.X, 2)), cost = :l1,
+                                       solver::Symbol = :clarabel, tol = CERT_TOL, gap_tol = 1e-7)
+    (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("wasserstein_robust_allocation requires finite ε ≥ 0, got $ε"))
+    (Xs, Xt, C, p) = wasserstein_support(m, unseen, cost)
+    εf = Float64(ε)
+    if εf == 0.0
+        r = optimal_allocation(m; solver, tol)
+        return RobustResult(r.a, r.growth, r.growth, Inf, p, Xs, r.kkt, :wasserstein, 0.0, :kkt)
+    end
+    (a0, Γ) = wasserstein_robust_conic(m, εf, Xs, Xt, C, p; solver)
+    wc(a) = wasserstein_worst_case(m, a, εf; unseen, cost)
+    a = copy(a0); Q = wc(a)[3]; tried = [copy(a0)]
+    for _ in 1:10
+        a = polish_log_optimal(Xt, max.(Q, 1e-300), a; tol)[1]   # 1e-300 floor keeps every support row feasible
+        push!(tried, copy(a))
+        v, λ, Qn = wc(a)
+        if maximum(abs.(Qn .- Q)) ≤ 1e-12
+            act = Qn .> 0
+            ρ = kkt_residual(Xt[act, :], a, Qn[act])
+            ρ ≤ tol && return RobustResult(a, v, growth(m, a), λ, Qn, Xt, ρ, :wasserstein, εf, :kkt)
+            break
+        end
+        Q = Qn
+    end
+    Qd = vec(sum(Γ, dims = 1))
+    mQ = ScenarioModel(Qd, Xt; assets = m.assets, has_cash = m.has_cash && all(==(1.0), Xt[:, 1]), structure = :correlated)
+    U = optimal_allocation(mQ; solver, tol).growth
+    a = tried[argmax([wc(b)[1] for b in tried])]
+    (L, λ, Qw) = wc(a)
+    gap = U - L
+    (-1e-12 ≤ gap ≤ gap_tol) || throw(CertificationError(gap, gap_tol, :wasserstein, "duality gap"))
+    return RobustResult(a, L, growth(m, a), λ, Qw, Xt, gap, :wasserstein, εf, :duality_gap)
+end
+
 
 
