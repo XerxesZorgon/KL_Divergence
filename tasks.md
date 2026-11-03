@@ -1316,7 +1316,7 @@ Stage with `git add -A` and commit with message `feat(uncertainty): sampled_payo
 ---
 
 ## Task 026: T-ERR-3 — the parent article's "weak prior cuts the bets by over 15%"
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02, commit 55b2888)
 **Milestone:** M3
 **Depends on:** 025
 
@@ -1369,3 +1369,37 @@ Stage with `git add -A` and commit with message `test(errata): T-ERR-3 — weak-
 
 ### On Failure
 `TASK 026 FAILED — [which of 1–4] — [assertion, expected vs got] — [error text]`
+
+**Result:** errata (T-ERR-3) testset 14 Pass; QUICK suite 35 535 Pass. Package finds no weak-prior reduction.
+
+---
+
+## Task 027: M3 documentation and full gate run
+**Status:** [x] Done (2026-11-02, commit e8f8b38)
+**Milestone:** M3
+**Depends on:** 026
+
+### What to do
+In `code/CHANGELOG.md`, under `## [Unreleased]`, append to `### Added`: "Task 023: `beta_predictive`, `dirichlet_predictive`,
+`mixture`, `bma_weights` (T-ORC-12, T-ORC-13)", "Task 024: `predictive_from_draws` (dependent posteriors)",
+"Task 025: `sampled_payoffs`, `growth_se` (payoff uncertainty)", "Task 026: T-ERR-3 errata test — the parent article's
+weak-prior reduction is not reproduced". Then run the **full** reference suite (one cmd session:
+`set KELLY_KL_REFERENCE_HOST=1`, make sure `KELLY_KL_QUICK` is not set — `set KELLY_KL_QUICK=` — then
+`julia --project=. -e "using Pkg; Pkg.test()"`). Stage with `git add -A` and commit with message `docs: CHANGELOG for M3`.
+
+### Files touched
+- `code/CHANGELOG.md` — one concern: M3 documentation
+
+### Acceptance Criterion
+1. The full reference run exits 0 with `Testing Kelly_KL tests passed`, every testset 0 Fail / 0 Error / 0 Broken;
+2. report the total Pass count and wall time from the summary;
+3. `git grep -n "Task 026: T-ERR-3" -- CHANGELOG.md` prints one line;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 027 FAILED — [which of 1–4] — [failing testset and message] — [error text]`
+
+**Result:** full reference suite 45 435 Pass in 1 m 52 s.
+
+**M3 complete (2026-11-02).** Gate met: T-ORC-12, T-ORC-13, T-ERR-3 green in the full run. Next: John's diff review
+(`git log --oneline 4ec7f93~1..HEAD`), then M4 (diagnostics).

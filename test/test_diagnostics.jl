@@ -1,4 +1,4 @@
-using StableRNGs, Random
+using StableRNGs, Random, Statistics
 
 @testset "diagnostics: kl" begin
     # (a)
@@ -23,5 +23,55 @@ using StableRNGs, Random
     # (e) validation
     @test_throws ArgumentError kl([0.5, 0.5], [1.0])
     @test_throws ArgumentError kl([0.5, -0.5], [0.5, 0.5])
+end
+
+@testset "diagnostics: growth loss and log scores" begin
+    # Identity: seed 1401, 200 cases
+    rng = StableRNG(1401)
+    for _ in 1:200
+        n = rand(rng, 2:8)
+        xp = randexp(rng, n); p = xp ./ sum(xp)
+        xq = randexp(rng, n); q = xq ./ sum(xq)
+        o = 1 .+ 9 .* rand(rng, n)
+        @test abs(growth_loss(single_event(p, o; cash = false), q) - kl(p, q)) ≤ 1e-12
+    end
+
+    # Bound: seed 1402, 200 correlated cases
+    rng = StableRNG(1402)
+    for _ in 1:200
+        S = rand(rng, 4:64)
+        n = rand(rng, 2:11)
+        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
+        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
+        xπb = π .* exp.((2 * rand(rng)) .* randn(rng, S)); πb = xπb ./ sum(xπb)
+        mt = correlated_bets(π, W)
+        mb = correlated_bets(πb, W)
+        rb = optimal_allocation(mb)
+        L = growth_loss(mt, rb.a)
+        @test -1e-10 ≤ L ≤ kl(mt.π, mb.π) + 1e-10
+    end
+
+    # T-DIA-5 (exact expectation): seed 1403, 200 cases
+    rng = StableRNG(1403)
+    for _ in 1:200
+        K = rand(rng, 2:10)
+        xp = randexp(rng, K); p = xp ./ sum(xp)
+        x1 = randexp(rng, K); π1 = x1 ./ sum(x1)
+        x2 = randexp(rng, K); π2 = x2 ./ sum(x2)
+        E = sum(p[i] * logscore_difference(π1, π2, [i]).mean for i in 1:K)
+        @test abs(E - (kl(p, π2) - kl(p, π1))) ≤ 1e-12
+    end
+
+    # SE
+    hs = holdout_logscore([0.5, 0.25, 0.25], [1, 2, 3, 1])
+    v_ref = log.([0.5, 0.25, 0.25, 0.5])
+    @test isapprox(hs.mean, mean(v_ref); atol = 1e-15)
+    @test isapprox(hs.se, std(v_ref) / 2; atol = 1e-15)
+    @test isnan(holdout_logscore([0.5, 0.5], [1]).se)
+
+    # Validation
+    @test_throws ArgumentError holdout_logscore([0.5, 0.5], [3])
+    @test_throws ArgumentError holdout_logscore([0.5, 0.5], Int[])
+    @test_throws ArgumentError logscore_difference([0.5, 0.5], [1.0], [1])
 end
 
