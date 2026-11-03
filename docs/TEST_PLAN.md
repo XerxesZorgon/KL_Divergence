@@ -78,7 +78,7 @@ Random tests use fixed seeds (StableRNG for new tests; E1 tests keep Xoshiro, AD
 | E1 | as T-E1-1, T-E1-2 |
 | E2 | share of 1 000 replications whose ±2 SE interval covers the true ΔKL lies within 3 binomial SE of the normal-theory 95.45% (i.e. 93.47–97.43%) — Task 043: '≥ 95%' would fail about 1 run in 10 by chance (binomial SE 0.66%) |
 | E3 | mean growth of BMA bet ≥ best single model bet across replications (paired difference > −2 SE) |
-| E4 | simulated Pr(drawdown to x) vs x^{2/c−1} for c ∈ {0.5, 1, 1.5}, small-edge discrete bets: within 3 SE, or the gap is reported with its size (law is a continuous-limit approximation) |
+| E4 | (i) zero-growth point \|c0 − 2\| ≤ 0.01; (ii) simulated Pr(wealth ever falls to x) within 3 SE of x^{2/c−1} for c ∈ {0.5, 1, 1.5} and x ∈ {0.5, 0.3, 0.1}; rows x ∈ {0.9, 0.7} are reported, not tested — a 10–30% drawdown is only a few losing bets, so wealth overshoots x and the simulated probability is biased low (discreteness, Task 045) |
 | E5 | minimum-stake ruin Monte Carlo vs classical formula within 3 SE (even-money unit bets) |
 | E6 | 95% CI for the edge covers the true edge in 94–96% of 10 000 replications at n = n_detect |
 | E7 | growth and ruin table (Bayesian, KL-ball, Wasserstein L1, Wasserstein L∞ sensitivity) across truth scenarios with an unseen tail; KL radius coverage of `kl_radius_chi2` within ±2 pp of level |

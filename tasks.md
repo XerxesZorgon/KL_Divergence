@@ -2514,7 +2514,7 @@ Stage with `git add -A` (the generated `experiments/output/` is git-ignored) and
 ### On Failure
 `TASK 043 FAILED — [which of 1–3] — [printed coverage line] — [error text]`
 
-**Result:** coverage of ±2 SE = 0.9480 (nominal 0.9545 ± 0.0198 over 1 000 replications) → PASS.
+**Result:** coverage 0.9480 over 1 000 replications; PASS (band 93.47–97.43%).
 
 ---
 
@@ -2523,5 +2523,68 @@ Stage with `git add -A` (the generated `experiments/output/` is git-ignored) and
 **Milestone:** M6
 **Depends on:** 043
 
-**Result:** mean advantages 0.015392 nats (n = 10, SE 0.000999, BMA ahead 74.0%), 0.006244 nats (n = 50, SE 0.000573, BMA ahead 71.4%), 0.001658 nats (n = 200, SE 0.000169, BMA ahead 72.5%) → PASS.
+### What to do
+`code/experiments/e3_bma.jl` has been placed in the folder by Claude (untracked; prototyped 2026-11-03 with the greedy solver
+standing in for `optimal_allocation`: mean advantage 0.0186 / 0.0054 / 0.0016 nats per bet at n = 10 / 50 / 200, BMA ahead in
+75.0 / 73.2 / 72.9% of replications; PASS). Use it as-is. Per replication: K ∈ 3:8 outcomes, truth p, bookmaker odds from a
+σ = 0.3 tilt with 5% margin (cash allowed); three candidate models (tilts σ = 0.2, 0.4, 0.6) scored by log-likelihood on n
+training outcomes; BMA bet uses the `bma_weights` mixture, the alternative bets on the highest-likelihood model; both are
+`optimal_allocation` bets, evaluated by `growth` under the truth. Pass: for every n, mean paired difference (BMA − best) > −2 SE.
+Outputs `output/e3_bma.csv`, `output/e3_bma_summary.csv`, `output/e3_bma.svg` (+ copy to `../img/` unless `quick`),
+`output/e3_meta.toml`.
+Run from `code/`: `julia --project=. experiments/e3_bma.jl`.
+Stage with `git add -A` and commit with message `feat(experiments): E3 — model averaging beats the best single model`.
+
+### Files touched
+- `code/experiments/e3_bma.jl` — new (provided) (one concern: experiment E3)
+
+### Acceptance Criterion
+1. The run exits 0 and prints three lines starting `E3: n =` and a final line `E3: PASS`; report the three mean advantages;
+2. `experiments/output/e3_bma.csv` has 3 001 lines; `experiments/output/e3_bma_summary.csv`, `experiments/output/e3_bma.svg`
+   and `../img/e3_bma.svg` exist; `experiments/output/e3_meta.toml` contains `pass = true`;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 044 FAILED — [which of 1–3] — [printed E3 lines] — [error text]`
+
+**Result:** mean advantage 0.015392 / 0.006244 / 0.001658 nats per bet at n = 10 / 50 / 200; PASS. (Prototype values differed
+by ≤ 2 SE because the prototype drew from Xoshiro, not StableRNG.)
+
+---
+
+## Task 045: E4 — overbetting cliff and drawdown law
+**Status:** [x] Done (2026-11-03)
+**Milestone:** M6
+**Depends on:** 044
+
+### What to do
+`code/experiments/e4_cliff_drawdown.jl` has been placed in the folder by Claude (untracked; prototyped 2026-11-03 with the
+package's `model.jl` + `diagnostics.jl` on Xoshiro: c0 = 1.996668; all nine tested rows |z| ≤ 1.32; PASS; ≈ 100 s). Use it
+as-is. One even-money bet, p = 0.525, Kelly stake b* = 0.05 from `optimal_allocation`. (a) `growth_curve` over c ∈ 0:0.025:3
+and `zero_growth_point`; (b) for c ∈ {0.5, 1, 1.5}, 2 000 `simulate_ruin` paths (stopped at wealth 10⁹, ≤ 100 000 rounds)
+compared with `drawdown_probability(x, c)` at x ∈ {0.9, 0.7, 0.5, 0.3, 0.1}. Outputs `output/e4_cliff.csv`,
+`output/e4_cliff.svg`, `output/e4_drawdown.csv`, `output/e4_drawdown.svg` (+ both SVGs copied to `../img/` unless `quick`),
+`output/e4_meta.toml`.
+**TEST_PLAN amendment:** in `docs/TEST_PLAN.md` §G, replace the E4 criterion with: "(i) zero-growth point |c0 − 2| ≤ 0.01;
+(ii) simulated Pr(wealth ever falls to x) within 3 SE of x^{2/c−1} for c ∈ {0.5, 1, 1.5} and x ∈ {0.5, 0.3, 0.1}; rows
+x ∈ {0.9, 0.7} are reported, not tested — a 10–30% drawdown is only a few losing bets, so wealth overshoots x and the
+simulated probability is biased low (discreteness, Task 045)".
+Run from `code/`: `julia --project=. experiments/e4_cliff_drawdown.jl`.
+Stage with `git add -A` and commit with message `feat(experiments): E4 — overbetting cliff and drawdown law`.
+
+### Files touched
+- `code/experiments/e4_cliff_drawdown.jl` — new (provided); `code/docs/TEST_PLAN.md` §G E4 row (one concern: experiment E4)
+
+### Acceptance Criterion
+1. The run exits 0, prints 15 lines starting `E4: c =`, a line `E4: zero-growth point c0 =`, and a final line `E4: PASS`;
+   report c0 and the largest |z| among the tested rows (x ≤ 0.5);
+2. `experiments/output/e4_cliff.csv` has 122 lines and `experiments/output/e4_drawdown.csv` has 16 lines;
+   `../img/e4_cliff.svg` and `../img/e4_drawdown.svg` exist; `experiments/output/e4_meta.toml` contains `pass = true`;
+3. report the wall time (from `e4_meta.toml`);
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 045 FAILED — [which of 1–4] — [the E4 lines with |z| > 3, or c0] — [error text]`
+
+**Result:** c0 = 1.996668, largest tested |z| = 1.84 (x ≤ 0.5), wall time 167.222 s; PASS.
 
