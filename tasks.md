@@ -1403,3 +1403,108 @@ weak-prior reduction is not reproduced". Then run the **full** reference suite (
 
 **M3 complete (2026-11-02).** Gate met: T-ORC-12, T-ORC-13, T-ERR-3 green in the full run. Next: John's diff review
 (`git log --oneline 4ec7f93~1..HEAD`), then M4 (diagnostics).
+M3 diff reviewed by John (2026-11-02): 5 commits 4ec7f93…e8f8b38.
+
+---
+
+# Milestone M4 — Diagnostics
+
+Sequence (full task text is written when the previous task is green):
+028. `growth_loss`, `holdout_logscore`, `logscore_difference` — T-DIA-5 (+ growth-loss identity/bound checks)
+029. `growth_curve`, `zero_growth_point` — T-DIA-3 (overbetting cliff)
+030. `drawdown_probability`, `effective_multiple`, `ruin_probability_classical`, `n_detect`, `n_relative` — T-DIA-1, T-DIA-2, T-DIA-4
+031. `simulate_ruin` — T-DIA-6 (adds `fixed_stake` and `target` keywords so even-money unit bets can be checked against
+     the classical formula; DESIGN §4.5 amended in that task)
+032. CHANGELOG for M4 + full gate run
+Gate: full `Pkg.test()` green incl. T-DIA-1…6 (T-DIA-7 belongs to M5 with `kl_radius_chi2`).
+
+---
+
+## Task 028: Growth loss and holdout log scores (T-DIA-5)
+**Status:** [x] Done (2026-11-02, commit 4a1a0bc)
+**Milestone:** M4
+**Depends on:** 027
+
+### What to do
+In `code/src/diagnostics.jl` add and export `growth_loss`, `holdout_logscore`, `logscore_difference` (DESIGN §4.5):
+- `growth_loss(m_true::ScenarioModel, a_belief)`: `r = optimal_allocation(m_true)` (certified); return
+  `r.growth - growth(m_true, a_belief)` (L = G_p(a_p) − G_p(a_q), nats per bet).
+- `holdout_logscore(π, y)`: `π` a probability vector, `y` a vector of held-out outcome indices (each in `1:length(π)`,
+  else `ArgumentError`; `length(y) ≥ 1`). `v = log.(π[y])`; return `(mean = mean(v), se = length(y) ≥ 2 ? std(v) / sqrt(length(y)) : NaN)`.
+- `logscore_difference(π1, π2, y)`: same validation (equal lengths of π1, π2); `v = log.(π1[y]) .- log.(π2[y])`; return
+  `(mean = mean(v), se = length(y) ≥ 2 ? std(v) / sqrt(length(y)) : NaN)`. Docstring: its expectation over outcomes drawn
+  from the truth p is D(p‖π2) − D(p‖π1) — positive when π1 is closer to the truth (the unknown entropy cancels).
+Add to `code/test/test_diagnostics.jl` a new `@testset "diagnostics: growth loss and log scores"` (StableRNG):
+- **Identity:** seed 1401, 200 cases: `n = rand(rng, 2:8)`, `p`, `q` normalized `randexp`, `o = 1 .+ 9 .* rand(rng, n)`;
+  `@test abs(growth_loss(single_event(p, o; cash = false), q) - kl(p, q)) ≤ 1e-12`.
+- **Bound:** seed 1402, 200 correlated cases built as Task 021's T-ORC-3 (correlated) family: with `rb = optimal_allocation(mb)`,
+  `L = growth_loss(mt, rb.a)`; `@test -1e-10 ≤ L ≤ kl(mt.π, mb.π) + 1e-10`.
+- **T-DIA-5 (exact expectation):** seed 1403, 200 cases: `K = rand(rng, 2:10)`; `p`, `π1`, `π2` normalized `randexp(rng, K)`;
+  `E = sum(p[i] * logscore_difference(π1, π2, [i]).mean for i in 1:K)`; `@test abs(E - (kl(p, π2) - kl(p, π1))) ≤ 1e-12`.
+- **SE:** `holdout_logscore([0.5, 0.25, 0.25], [1, 2, 3, 1])` has `mean ≈ mean(log.([0.5, 0.25, 0.25, 0.5]))` and
+  `se ≈ std(log.([0.5, 0.25, 0.25, 0.5])) / 2` (atol 1e-15); `isnan(holdout_logscore([0.5, 0.5], [1]).se)`.
+- **Validation:** `holdout_logscore([0.5, 0.5], [3])`, `holdout_logscore([0.5, 0.5], Int[])` and
+  `logscore_difference([0.5, 0.5], [1.0], [1])` throw `ArgumentError`.
+Stage with `git add -A` and commit with message `feat(diagnostics): growth_loss, holdout_logscore, logscore_difference (T-DIA-5)`.
+
+### Files touched
+- `code/src/diagnostics.jl`, `code/src/Kelly_KL.jl` (exports) — one concern: model-error diagnostics
+- `code/test/test_diagnostics.jl` — new testset
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `diagnostics: growth loss and log scores` shows ≥ 600 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 028 FAILED — [which of 1–3] — [part, seed, case, expected vs got] — [error text]`
+
+**Result:** 606 Pass; QUICK suite 36 141 Pass. Antigravity's mid-task fix to the probability-validation helper reviewed:
+it validates both π vectors (non-negative, finite, sum to 1) — not weakened.
+
+---
+
+## Task 029: Growth curve and zero-growth point (T-DIA-3)
+**Status:** [ ] Pending
+**Milestone:** M4
+**Depends on:** 028
+
+### What to do
+In `code/src/diagnostics.jl` add and export `growth_curve` and `zero_growth_point` (DESIGN §4.5):
+- `growth_curve(m::ScenarioModel, a_star, cs)`: requires `m.has_cash` (`ArgumentError`). With `b = a_star[2:end]` (the bet
+  stakes), for each `c` in `cs` form `a_c = vcat(1 - c * sum(b), c .* b)` (scale every stake by c, cash absorbs the rest — it
+  may go negative, i.e. borrowing); with `pos = findall(>(0.0), m.π)` and `V = m.X * a_c`, return
+  `any(V[pos] .≤ 0) ? -Inf : sum(m.π[pos] .* log.(V[pos]))`. Returns a `Vector{Float64}`. (Compute over `pos` only — never
+  call `log` on a non-positive wealth.)
+- `zero_growth_point(m::ScenarioModel, a_star)`: `G(c) = growth_curve(m, a_star, [c])[1]`. Require `G(1.0) > 0`
+  (`ArgumentError("no positive growth at c = 1")`). Bracket: `lo = 1.0, hi = 2.0`; while `G(hi) > 0`: `lo = hi; hi *= 2`,
+  throwing `ArgumentError` if `hi > 1e6`. Bisect (`G(mid) > 0 ? lo = mid : hi = mid`, where `-Inf` counts as ≤ 0) until
+  `hi - lo ≤ 1e-14 * hi`. Return `(c0 = (lo + hi) / 2, c_quad = 2.0)` — `c_quad` is the quadratic-approximation value.
+  Docstring: betting `c0` times the Kelly stakes gives zero long-run growth; beyond it wealth tends to 0.
+Add to `code/test/test_diagnostics.jl` a new `@testset "diagnostics: growth curve (T-DIA-3)"`:
+- **T-DIA-3:** `p = 0.505`, `w = 2.0` (edge e = 0.01); `m = ScenarioModel([p, 1 - p], [1.0 w; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :single_event)`;
+  `r = optimal_allocation(m)`; `z = zero_growth_point(m, r.a)`; `@test abs(z.c0 - 2) < 0.05`;
+  `@test abs(growth_curve(m, r.a, [z.c0])[1]) ≤ 1e-12`; `@test abs(z.c0 - 1.9998666684444875) ≤ 1e-9` (root by brentq);
+  `@test z.c_quad == 2.0`.
+- **Curve shape:** `G = growth_curve(m, r.a, [0.0, 0.5, 1.0, 1.5, 2.5])`: `@test G[1] == 0.0`; `@test abs(G[3] - r.growth) ≤ 1e-15`;
+  `@test G[2] < G[3]` and `@test G[4] < G[3]`; `@test G[5] < 0` (the overbetting cliff: 2.5× Kelly loses money);
+  `growth_curve(m, r.a, [1 / r.a[2]])[1] == -Inf` (staking everything loses it all on a loss).
+- **Simultaneous model:** `ms = simultaneous_bets([0.3, 0.25], [4.0, 6.0])`, `rs = optimal_allocation(ms)`,
+  `zs = zero_growth_point(ms, rs.a)`; `@test 1 < zs.c0` and `@test abs(growth_curve(ms, rs.a, [zs.c0])[1]) ≤ 1e-12`.
+- **Validation:** `growth_curve(single_event([0.5, 0.5], [2.1, 2.1]; cash = false), [0.5, 0.5], [1.0])` throws `ArgumentError`
+  (no cash); `zero_growth_point(m, [1.0, 0.0])` throws `ArgumentError` (zero growth at c = 1).
+Stage with `git add -A` and commit with message `feat(diagnostics): growth_curve, zero_growth_point (T-DIA-3)`.
+
+### Files touched
+- `code/src/diagnostics.jl`, `code/src/Kelly_KL.jl` (exports) — one concern: overbetting diagnostics
+- `code/test/test_diagnostics.jl` — new testset
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `diagnostics: growth curve (T-DIA-3)` shows ≥ 14 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 029 FAILED — [which of 1–3] — [assertion, expected vs got] — [error text]`

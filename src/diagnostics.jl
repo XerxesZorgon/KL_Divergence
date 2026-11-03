@@ -52,3 +52,48 @@ function logscore_difference(π1::AbstractVector{<:Real}, π2::AbstractVector{<:
     return (mean = mean(v), se = n ≥ 2 ? std(v) / sqrt(n) : NaN)
 end
 
+function growth_curve(m::ScenarioModel, a_star::AbstractVector{<:Real}, cs::AbstractVector{<:Real})
+    m.has_cash || throw(ArgumentError("growth_curve requires m.has_cash == true"))
+    length(a_star) == size(m.X, 2) || throw(ArgumentError("growth_curve: length(a_star) != size(m.X, 2)"))
+    b = Float64.(a_star[2:end])
+    sb = sum(b)
+    pos = findall(>(0.0), m.π)
+    Xp = m.X[pos, :]
+    πp = m.π[pos]
+    out = Vector{Float64}(undef, length(cs))
+    for (idx, c_raw) in enumerate(cs)
+        c = Float64(c_raw)
+        a_c = vcat(1.0 - c * sb, c .* b)
+        Vp = Xp * a_c
+        out[idx] = any(≤(0.0), Vp) ? -Inf : sum(πp .* log.(Vp))
+    end
+    return out
+end
+
+"""
+    zero_growth_point(m::ScenarioModel, a_star)
+
+Find `c0 > 1` where scaling the Kelly stakes `a_star[2:end]` by `c0` gives zero long-run growth
+`G(c0) = 0`; beyond `c0` wealth tends to 0. Returns `(c0 = c0, c_quad = 2.0)`.
+"""
+function zero_growth_point(m::ScenarioModel, a_star::AbstractVector{<:Real})
+    G(c) = growth_curve(m, a_star, [c])[1]
+    G(1.0) > 0.0 || throw(ArgumentError("no positive growth at c = 1"))
+    lo = 1.0
+    hi = 2.0
+    while G(hi) > 0.0
+        lo = hi
+        hi *= 2.0
+        hi > 1e6 && throw(ArgumentError("zero_growth_point bracket exceeded 1e6"))
+    end
+    while hi - lo > 1e-14 * hi
+        mid = 0.5 * (lo + hi)
+        if G(mid) > 0.0
+            lo = mid
+        else
+            hi = mid
+        end
+    end
+    return (c0 = 0.5 * (lo + hi), c_quad = 2.0)
+end
+

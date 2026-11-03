@@ -75,3 +75,36 @@ end
     @test_throws ArgumentError logscore_difference([0.5, 0.5], [1.0], [1])
 end
 
+@testset "diagnostics: growth curve (T-DIA-3)" begin
+    # T-DIA-3
+    p = 0.505
+    w = 2.0
+    m = ScenarioModel([p, 1 - p], [1.0 w; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :single_event)
+    r = optimal_allocation(m)
+    z = zero_growth_point(m, r.a)
+    @test abs(z.c0 - 2) < 0.05
+    @test abs(growth_curve(m, r.a, [z.c0])[1]) ≤ 1e-12
+    @test abs(z.c0 - 1.9998666684444875) ≤ 1e-9
+    @test z.c_quad == 2.0
+
+    # Curve shape
+    G = growth_curve(m, r.a, [0.0, 0.5, 1.0, 1.5, 2.5])
+    @test G[1] == 0.0
+    @test abs(G[3] - r.growth) ≤ 1e-15
+    @test G[2] < G[3]
+    @test G[4] < G[3]
+    @test G[5] < 0
+    @test growth_curve(m, r.a, [1.0001 / r.a[2]])[1] == -Inf
+
+    # Simultaneous model
+    ms = simultaneous_bets([0.3, 0.25], [4.0, 6.0])
+    rs = optimal_allocation(ms)
+    zs = zero_growth_point(ms, rs.a)
+    @test 1 < zs.c0
+    @test abs(growth_curve(ms, rs.a, [zs.c0])[1]) ≤ 1e-12
+
+    # Validation
+    @test_throws ArgumentError growth_curve(single_event([0.5, 0.5], [2.1, 2.1]; cash = false), [0.5, 0.5], [1.0])
+    @test_throws ArgumentError zero_growth_point(m, [1.0, 0.0])
+end
+
