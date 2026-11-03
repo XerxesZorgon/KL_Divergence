@@ -1262,7 +1262,7 @@ Stage with `git add -A` and commit with message `feat(uncertainty): predictive_f
 ---
 
 ## Task 025: Sampled payoffs and Monte Carlo standard error of growth
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02, commit 08bd8b6)
 **Milestone:** M3
 **Depends on:** 024
 
@@ -1309,3 +1309,63 @@ Stage with `git add -A` and commit with message `feat(uncertainty): sampled_payo
 
 ### On Failure
 `TASK 025 FAILED — [which of 1–3] — [part, expected vs got] — [error text]`
+
+**Result:** sampled-payoffs testset 17 Pass; QUICK suite 35 521 Pass. Payoff spread (1.5/2.9, mean 2.2) cuts the stake
+0.0833 → 0.0718 (−14%).
+
+---
+
+## Task 026: T-ERR-3 — the parent article's "weak prior cuts the bets by over 15%"
+**Status:** [ ] Pending
+**Milestone:** M3
+**Depends on:** 025
+
+### Evidence gathered (2026-11-02, from the parent article and `code/kelly_general_bayes.jl` in XerxesZorgon/Extended-Kelly)
+- Article inputs: means p = (0.30, 0.25), gross payoffs (4.0, 6.0), Scenario A prior strength s = 1000, Scenario B s = 2;
+  reported A: b = [0.06565483237670092, 0.0990407051985005] (total 0.16469553757520142); B: b = [0.044006266789879726,
+  0.09526125397014709] (total 0.13926752076002683); "reduction in total bet = 15.44%". `n_samples` not stated.
+- `objective_gen_bayes` (repo): per sample, draws p_i ~ Beta(s·m_i, s·(1−m_i)), then win ~ Bernoulli(p_i), then a
+  LogNormal(log w_i, θ) return on a win (repo example θ = 0.05; loss return LogNormal(log 1e-6, θ)); averages log W.
+  No variance penalty; the `correlation` field is stored but unused (independent bets); default `n_samples = 100_000`,
+  `rng = Random.GLOBAL_RNG` (fresh draws on every objective evaluation).
+- Consequence: a win drawn as Bernoulli(p) with p ~ Beta(s·m, s(1−m)) is marginally Bernoulli(m) for every s, so the
+  per-sample distribution of log W — and the true optimum — is identical for s = 2 and s = 1000. The 15.44% difference
+  cannot come from the prior; it is consistent with Monte Carlo noise in an objective re-sampled at every evaluation:
+  near the optimum the growth surface is flat, so ~1e-3 of objective noise moves stakes by ~0.03. Even Scenario A
+  (0.06565) is 0.0012 away from the exact 0.06450. (Status: strong analytical evidence; the parent code itself was
+  not re-run here.)
+
+### What to do
+Create `code/test/test_errata.jl` with `@testset "errata (T-ERR-3)"`:
+- Constants (with the source comment above): `ARTICLE_A = [0.06565483237670092, 0.0990407051985005]`,
+  `ARTICLE_B = [0.044006266789879726, 0.09526125397014709]`, `ARTICLE_REDUCTION = 0.1544`.
+- **Fixed payoffs:** for `s ∈ (1000.0, 2.0)`: `p̄ = beta_predictive(s .* [0.30, 0.25], s .* [0.70, 0.75])`,
+  `r_s = optimal_allocation(simultaneous_bets(p̄, [4.0, 6.0]))`, `assert_certified`. `@test maximum(abs.(r_2.a .- r_1000.a)) ≤ 1e-12`;
+  `@test abs(sum(r_1000.a[2:3]) - 0.16365467286269636) ≤ 1e-10` (exact total, = T-ERR-2);
+  `reduction = 1 - sum(r_2.a[2:3]) / sum(r_1000.a[2:3])`; `@test abs(reduction) ≤ 1e-10` (the package finds no reduction).
+- **LogNormal payoffs as in the repo (θ = 0.05), common random numbers:** for `s ∈ (1000.0, 2.0)`:
+  `m_s = sampled_payoffs(p̄_s, [Distributions.LogNormal(log(4.0), 0.05), Distributions.LogNormal(log(6.0), 0.05)], 200; rng = StableRNG(1301))`
+  (the same seed for both, so both scenarios see the same payoff draws); `r_s = optimal_allocation(m_s)`, `assert_certified`;
+  `@test maximum(abs.(r_2.a .- r_1000.a)) ≤ 1e-12`.
+- **Documented discrepancy:** `@test abs(1 - sum(ARTICLE_B) / sum(ARTICLE_A) - ARTICLE_REDUCTION) ≤ 1e-4` (the article's own
+  numbers give 15.44%), and `@test maximum(abs.(ARTICLE_A .- r_1000_fixed.a[2:3])) > 1e-3` (even Scenario A misses the exact
+  bet by > 1e-3 — evidence of Monte Carlo error), using the fixed-payoff `r_1000` from above.
+Add `include("test_errata.jl")` to `test/runtests.jl`. In `code/docs/PLAN.md`, Errata track, replace the T-ERR-3 row's
+evidence cell with: "Not reproduced. With p ~ Beta(s·m, s(1−m)) and win ~ Bernoulli(p), each bet wins with probability m
+for every s, so the optimum is identical for s = 2 and s = 1000 (package: identical bets, ≤ 1e-12; total 0.163655). The
+reported 15.44% is consistent with Monte Carlo noise: the repo's objective re-samples with GLOBAL_RNG at every evaluation,
+and the article's Scenario A itself misses the exact bet by 0.0012. Erratum stands (Task 026); the parent code was not re-run."
+Stage with `git add -A` and commit with message `test(errata): T-ERR-3 — weak-prior reduction not reproduced`.
+
+### Files touched
+- `code/test/test_errata.jl` — new; `code/test/runtests.jl` — include line; `code/docs/PLAN.md` — T-ERR-3 evidence (one concern: T-ERR-3)
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `errata (T-ERR-3)` shows ≥ 12 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. `git grep -n "Not reproduced" -- docs/PLAN.md` prints one line;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 026 FAILED — [which of 1–4] — [assertion, expected vs got] — [error text]`

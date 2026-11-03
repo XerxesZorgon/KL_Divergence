@@ -22,6 +22,10 @@ completed task (AGENTS.md Part 7).
 - Task 019: `optimal_allocation` general path (conic + polish + certify) and `method = :auto | :conic`
 - Task 020: oracle tests T-ORC-1 (conic), T-ORC-8, T-ERR-2
 - Task 021: oracle tests T-ORC-3 (L ≤ D beyond single events), T-ORC-5
+- Task 023: `beta_predictive`, `dirichlet_predictive`, `mixture`, `bma_weights` (T-ORC-12, T-ORC-13)
+- Task 024: `predictive_from_draws` (dependent posteriors)
+- Task 025: `sampled_payoffs`, `growth_se` (payoff uncertainty)
+- Task 026: T-ERR-3 errata test — the parent article's weak-prior reduction is not reproduced
 
 ### Changed
 - Tasks 012–013, 015: E1 experiment, plot and results moved to `experiments/` and refactored to call Kelly_KL; outputs byte-identical to `e1-original`
