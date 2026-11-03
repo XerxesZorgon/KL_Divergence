@@ -1,4 +1,4 @@
-using StableRNGs, Random, Statistics
+using StableRNGs, Random, Statistics, LinearAlgebra
 
 @testset "diagnostics: kl" begin
     # (a)
@@ -106,5 +106,40 @@ end
     # Validation
     @test_throws ArgumentError growth_curve(single_event([0.5, 0.5], [2.1, 2.1]; cash = false), [0.5, 0.5], [1.0])
     @test_throws ArgumentError zero_growth_point(m, [1.0, 0.0])
+end
+
+@testset "diagnostics: ruin and sample sizes (T-DIA-1, 2, 4)" begin
+    # T-DIA-1
+    for p in (0.4, 0.5, 0.55), N in 2:200
+        n = N - 1
+        T = Tridiagonal(fill(-(1 - p), n - 1), ones(n), fill(-p, n - 1))
+        rhs = zeros(n)
+        rhs[1] = 1 - p
+        P = vcat(1.0, T \ rhs, 0.0)
+        @test maximum(abs(P[a + 1] - ruin_probability_classical(p, a, N)) for a in 0:N) ≤ 1e-12
+    end
+    @test ruin_probability_classical(0.5, 3, 10) == 1 - 3 / 10
+
+    # T-DIA-2
+    for x in (0.1, 0.25, 0.5, 0.9)
+        @test drawdown_probability(x, 1.0) == x
+        @test drawdown_probability(x, 2.0) == 1.0
+        @test abs(drawdown_probability(x, 0.5) - x^3) ≤ 1e-15
+    end
+    @test drawdown_probability(0.5, 3.0) == 1.0
+
+    # T-DIA-4
+    @test isapprox(n_detect(0.5, 2.2), 464.8336; rtol = 1e-9)
+    @test isapprox(n_relative(0.5, 2.2), 12100.0; rtol = 1e-9)
+
+    # Effective multiple
+    @test effective_multiple(0.02, 0.01) == 2.0
+
+    # Validation
+    @test_throws ArgumentError drawdown_probability(1.0, 1.0)
+    @test_throws ArgumentError ruin_probability_classical(1.0, 1, 2)
+    @test_throws ArgumentError ruin_probability_classical(0.5, 3, 2)
+    @test_throws ArgumentError n_detect(0.5, 2.0)
+    @test_throws ArgumentError effective_multiple(0.01, 0.0)
 end
 

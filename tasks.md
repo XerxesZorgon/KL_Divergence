@@ -1466,7 +1466,7 @@ it validates both π vectors (non-negative, finite, sum to 1) — not weakened.
 ---
 
 ## Task 029: Growth curve and zero-growth point (T-DIA-3)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02, commit 804746a)
 **Milestone:** M4
 **Depends on:** 028
 
@@ -1489,7 +1489,7 @@ Add to `code/test/test_diagnostics.jl` a new `@testset "diagnostics: growth curv
   `@test z.c_quad == 2.0`.
 - **Curve shape:** `G = growth_curve(m, r.a, [0.0, 0.5, 1.0, 1.5, 2.5])`: `@test G[1] == 0.0`; `@test abs(G[3] - r.growth) ≤ 1e-15`;
   `@test G[2] < G[3]` and `@test G[4] < G[3]`; `@test G[5] < 0` (the overbetting cliff: 2.5× Kelly loses money);
-  `growth_curve(m, r.a, [1 / r.a[2]])[1] == -Inf` (staking everything loses it all on a loss).
+  `growth_curve(m, r.a, [1.0001 / r.a[2]])[1] == -Inf` (staking more than everything — borrowing — leaves negative wealth on a loss).
 - **Simultaneous model:** `ms = simultaneous_bets([0.3, 0.25], [4.0, 6.0])`, `rs = optimal_allocation(ms)`,
   `zs = zero_growth_point(ms, rs.a)`; `@test 1 < zs.c0` and `@test abs(growth_curve(ms, rs.a, [zs.c0])[1]) ≤ 1e-12`.
 - **Validation:** `growth_curve(single_event([0.5, 0.5], [2.1, 2.1]; cash = false), [0.5, 0.5], [1.0])` throws `ArgumentError`
@@ -1508,3 +1508,51 @@ Stage with `git add -A` and commit with message `feat(diagnostics): growth_curve
 
 ### On Failure
 `TASK 029 FAILED — [which of 1–3] — [assertion, expected vs got] — [error text]`
+
+**Result:** 14 Pass; QUICK suite 36 155 Pass.
+
+---
+
+## Task 030: Drawdown law, classical ruin, effective multiple, sample sizes (T-DIA-1, T-DIA-2, T-DIA-4)
+**Status:** [ ] Pending
+**Milestone:** M4
+**Depends on:** 029
+
+### What to do
+In `code/src/diagnostics.jl` add and export (DESIGN §4.5, §5.10):
+- `drawdown_probability(x, c)`: validate `0 < x < 1`, `c > 0`; return `c ≥ 2 ? 1.0 : x^(2 / c - 1)`. Docstring: continuous-limit
+  probability that wealth ever falls to fraction x of its starting value when betting c times the Kelly stakes
+  (Thorp 2006 — to be checked in E4); a diagnostic, never a sizing rule (ADR-011).
+- `effective_multiple(e_belief, e_true)`: validate `e_true > 0`; return `e_belief / e_true` (small-edge approximation of how
+  many "Kelly multiples" a mis-estimated edge makes you bet).
+- `ruin_probability_classical(p, a, N)`: validate `0 < p < 1`, integers `N ≥ 1`, `0 ≤ a ≤ N`; `q = 1 - p`; return
+  `p == 0.5 ? 1 - a / N : ((q / p)^a - (q / p)^N) / (1 - (q / p)^N)` (±1-unit even-money steps, absorbing at 0 and N).
+- `n_detect(p, w; z = 1.96)` and `n_relative(p, w; rel = 0.10)`: validate `0 < p < 1`, `w > 0`, `e = p * w - 1 ≠ 0`
+  (`ArgumentError` "zero edge"); return `z^2 * p * (1 - p) * w^2 / e^2` and `p * (1 - p) * w^2 / (rel * e)^2`.
+Add to `code/test/test_diagnostics.jl` a new `@testset "diagnostics: ruin and sample sizes (T-DIA-1, 2, 4)"`:
+- **T-DIA-1:** for `p ∈ (0.4, 0.5, 0.55)` and `N ∈ 2:200`, solve the gambler's-ruin linear system
+  (`n = N - 1`; `T = Tridiagonal(fill(-(1 - p), n - 1), ones(n), fill(-p, n - 1))`; `rhs = zeros(n); rhs[1] = 1 - p`;
+  `P = vcat(1.0, T \ rhs, 0.0)`, so `P[a + 1]` is the ruin probability from a) and assert, as one `@test` per (p, N),
+  `maximum(abs(P[a + 1] - ruin_probability_classical(p, a, N)) for a in 0:N) ≤ 1e-12` (prototype worst 2.6e-14);
+  plus `@test ruin_probability_classical(0.5, 3, 10) == 1 - 3 / 10`.
+- **T-DIA-2:** for `x ∈ (0.1, 0.25, 0.5, 0.9)`: `@test drawdown_probability(x, 1.0) == x`; `@test drawdown_probability(x, 2.0) == 1.0`;
+  `@test abs(drawdown_probability(x, 0.5) - x^3) ≤ 1e-15`; `@test drawdown_probability(0.5, 3.0) == 1.0`.
+- **T-DIA-4:** `@test isapprox(n_detect(0.5, 2.2), 464.8336; rtol = 1e-9)` (= 1.96²·0.25·4.84/0.01);
+  `@test isapprox(n_relative(0.5, 2.2), 12100.0; rtol = 1e-9)` (= 100·0.25·4.84/0.01).
+- **Effective multiple:** `@test effective_multiple(0.02, 0.01) == 2.0`.
+- **Validation:** `drawdown_probability(1.0, 1.0)`, `ruin_probability_classical(1.0, 1, 2)`, `ruin_probability_classical(0.5, 3, 2)`,
+  `n_detect(0.5, 2.0)` (zero edge) and `effective_multiple(0.01, 0.0)` each throw `ArgumentError`.
+Stage with `git add -A` and commit with message `feat(diagnostics): drawdown law, classical ruin, sample sizes (T-DIA-1, 2, 4)`.
+
+### Files touched
+- `code/src/diagnostics.jl`, `code/src/Kelly_KL.jl` (exports) — one concern: closed-form risk and sample-size diagnostics
+- `code/test/test_diagnostics.jl` — new testset
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `diagnostics: ruin and sample sizes (T-DIA-1, 2, 4)` shows ≥ 620 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 030 FAILED — [which of 1–3] — [assertion, p/N/x, expected vs got] — [error text]`

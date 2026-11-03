@@ -97,3 +97,51 @@ function zero_growth_point(m::ScenarioModel, a_star::AbstractVector{<:Real})
     return (c0 = 0.5 * (lo + hi), c_quad = 2.0)
 end
 
+"""
+    drawdown_probability(x, c)
+
+Continuous-limit probability that wealth ever falls to fraction `x` of its starting value
+when betting `c` times the Kelly stakes (Thorp 2006 — to be checked in E4); a diagnostic,
+never a sizing rule (ADR-011).
+"""
+function drawdown_probability(x::Real, c::Real)
+    (isfinite(x) && 0.0 < x < 1.0) || throw(ArgumentError("drawdown_probability requires 0 < x < 1, got $x"))
+    (isfinite(c) && c > 0.0) || throw(ArgumentError("drawdown_probability requires c > 0, got $c"))
+    return c ≥ 2.0 ? 1.0 : Float64(x)^(2.0 / Float64(c) - 1.0)
+end
+
+function effective_multiple(e_belief::Real, e_true::Real)
+    (isfinite(e_belief) && isfinite(e_true) && e_true > 0.0) ||
+        throw(ArgumentError("effective_multiple requires finite e_belief and e_true > 0"))
+    return Float64(e_belief) / Float64(e_true)
+end
+
+function ruin_probability_classical(p::Real, a::Integer, N::Integer)
+    (isfinite(p) && 0.0 < p < 1.0) || throw(ArgumentError("ruin_probability_classical requires 0 < p < 1, got $p"))
+    N ≥ 1 || throw(ArgumentError("ruin_probability_classical requires N ≥ 1, got $N"))
+    0 ≤ a ≤ N || throw(ArgumentError("ruin_probability_classical requires 0 ≤ a ≤ N, got a = $a, N = $N"))
+    pf = Float64(p)
+    q = 1.0 - pf
+    return pf == 0.5 ? 1.0 - a / N : ((q / pf)^a - (q / pf)^N) / (1.0 - (q / pf)^N)
+end
+
+function _validate_sample_size_inputs(p::Real, w::Real, name::AbstractString)
+    (isfinite(p) && 0.0 < p < 1.0) || throw(ArgumentError("$name requires 0 < p < 1, got $p"))
+    (isfinite(w) && w > 0.0) || throw(ArgumentError("$name requires w > 0, got $w"))
+    e = Float64(p) * Float64(w) - 1.0
+    e ≠ 0.0 || throw(ArgumentError("$name: zero edge"))
+    return Float64(p), Float64(w), e
+end
+
+function n_detect(p::Real, w::Real; z::Real = 1.96)
+    (isfinite(z) && z > 0.0) || throw(ArgumentError("n_detect requires z > 0"))
+    pf, wf, e = _validate_sample_size_inputs(p, w, "n_detect")
+    return Float64(z)^2 * pf * (1.0 - pf) * wf^2 / e^2
+end
+
+function n_relative(p::Real, w::Real; rel::Real = 0.10)
+    (isfinite(rel) && rel > 0.0) || throw(ArgumentError("n_relative requires rel > 0"))
+    pf, wf, e = _validate_sample_size_inputs(p, w, "n_relative")
+    return pf * (1.0 - pf) * wf^2 / (Float64(rel) * e)^2
+end
+
