@@ -1006,7 +1006,7 @@ Rerun the reference suite and commit as in Task 020. Acceptance as Task 020, wit
 ---
 
 ## Task 021: L ≤ D beyond single events (T-ORC-3) and KKT on larger conic problems (T-ORC-5)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02, after Fix 021a, commit a2bb868)
 **Milestone:** M2
 **Depends on:** 020
 
@@ -1109,3 +1109,41 @@ Rerun the reference suite (full mode). If it passes, stage with `git add -A` and
 `fix(polish): feasible start and ratio-test drop; T-ORC-3, T-ORC-5`.
 Acceptance: as Task 021 (testset `general models (T-ORC-3, T-ORC-5)` ≥ 7 000 Pass, 0 Fail, 0 Error; report its wall time),
 plus testset `polish` ≥ 502 Pass, 0 Fail; every other testset 0 Fail / 0 Error / 0 Broken.
+
+**Result (Fix 021a):** general models 11 000 Pass (36.7 s); polish 502 Pass; suite 43 286 Pass in 1 m 38 s.
+
+---
+
+## Task 022: M2 documentation — CHANGELOG and errata track
+**Status:** [x] Done (2026-11-02, commit cda7c5b)
+**Milestone:** M2
+**Depends on:** 021
+
+### What to do
+In `code/CHANGELOG.md`, under `## [Unreleased]`, append to `### Added`: "Task 016: `simultaneous_bets`, `correlated_bets`",
+"Task 017: exponential-cone solver `solve_conic` (Clarabel; SCS by keyword)", "Task 018: Newton polish on the active set",
+"Task 019: `optimal_allocation` general path (conic + polish + certify) and `method = :auto | :conic`",
+"Task 020: oracle tests T-ORC-1 (conic), T-ORC-8, T-ERR-2", "Task 021: oracle tests T-ORC-3 (L ≤ D beyond single events), T-ORC-5";
+and add `### Fixed`: "Task 021: polish no longer zeroes a weight needed for feasibility, and drops a weight a Newton
+step would push below zero (ratio test) instead of stalling".
+In `code/docs/PLAN.md`, Errata track table: change the T-ERR-2 row's evidence cell to
+"Reproduced: (0.06450023479783634, 0.09915443806486002). Values match; the parent article prints 0.0991, a 4-decimal
+truncation — correctly rounded 0.0992 (minor presentation erratum, Task 020)."
+Run the reference suite in QUICK mode (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+`julia --project=. -e "using Pkg; Pkg.test()"`). Stage with `git add -A` and commit with message `docs: CHANGELOG and errata for M2`.
+
+### Files touched
+- `code/CHANGELOG.md`, `code/docs/PLAN.md` — one concern: M2 documentation
+
+### Acceptance Criterion
+1. The QUICK reference run exits 0 with `Testing Kelly_KL tests passed`, every testset 0 Fail / 0 Error / 0 Broken;
+2. `git grep -n "Task 021: polish" -- CHANGELOG.md` prints one line, and `git grep -n "0.0992" -- docs/PLAN.md` prints ≥ 1 line;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 022 FAILED — [which of 1–3] — [observed output] — [error text]`
+
+**Result:** QUICK reference suite 33 386 Pass.
+
+**M2 complete (2026-11-02).** Gate met: full suite 43 286 Pass (Task 021 run) incl. T-ORC-1 (conic), T-ORC-3, T-ORC-5,
+T-ORC-8, T-ERR-2. Next: checkpoint + John's diff review (`git log --oneline 3230e88~1..HEAD`), optional /refactor, then M3.
