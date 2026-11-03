@@ -1562,7 +1562,7 @@ Stage with `git add -A` and commit with message `feat(diagnostics): drawdown law
 ---
 
 ## Task 031: Ruin simulator (T-DIA-6)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-03, commit e30d1d9)
 **Milestone:** M4
 **Depends on:** 030
 
@@ -1642,3 +1642,137 @@ Stage with `git add -A` and commit with message `feat(diagnostics): simulate_rui
 
 ### On Failure
 `TASK 031 FAILED — [which of 1–4] — [part, observed vs expected, se] — [error text]`
+
+**Result:** 11 Pass (19.1 s in QUICK mode); QUICK suite 36 785 Pass in 1 m 42 s.
+
+---
+
+## Task 032: M4 documentation and full gate run
+**Status:** [x] Done (2026-11-03, commit 22df93e)
+**Milestone:** M4
+**Depends on:** 031
+
+### What to do
+In `code/CHANGELOG.md`, under `## [Unreleased]`, append to `### Added`: "Task 028: `growth_loss`, `holdout_logscore`,
+`logscore_difference` (T-DIA-5)", "Task 029: `growth_curve`, `zero_growth_point` (T-DIA-3)", "Task 030:
+`drawdown_probability`, `effective_multiple`, `ruin_probability_classical`, `n_detect`, `n_relative` (T-DIA-1, 2, 4)",
+"Task 031: `simulate_ruin` with `fixed_stake`, `target` and `min_fraction` (T-DIA-6)". Then run the **full** reference suite
+(one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=`, then `julia --project=. -e "using Pkg; Pkg.test()"`).
+Stage with `git add -A` and commit with message `docs: CHANGELOG for M4`.
+
+### Files touched
+- `code/CHANGELOG.md` — one concern: M4 documentation
+
+### Acceptance Criterion
+1. The full reference run exits 0 with `Testing Kelly_KL tests passed`, every testset 0 Fail / 0 Error / 0 Broken;
+2. report the total Pass count, total wall time, and the `diagnostics: ruin simulator (T-DIA-6)` wall time;
+3. `git grep -n "Task 031" -- CHANGELOG.md` prints exactly one line;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 032 FAILED — [which of 1–4] — [failing testset and message] — [error text]`
+
+**Result:** full reference suite 46 685 Pass in 2 m 21 s (T-DIA-6: 28.0 s).
+
+**M4 complete (2026-11-03).** Gate met: T-DIA-1…6 green in the full run. Next: John's diff review
+(`git log --oneline 4a1a0bc~1..HEAD`), then M5 (robust objectives: KL and Wasserstein balls, T-DIA-7).
+M4 diff reviewed by John (2026-11-03): 5 commits 4a1a0bc…22df93e.
+
+---
+
+# Milestone M5 — Robust objectives (KL ball, Wasserstein ball)
+
+### Prototype findings that shape M5 (2026-11-03; Julia 1.13 + Python cvxpy/Clarabel 0.11.1 references)
+- **KL inner worst case (fixed bet):** the 1-D dual (bisection on log λ, Q ∝ π·e^{−f/λ}) hits |D(Q*‖π) − ε| ≤ 7e-16 on 200
+  random cases. The direct conic solve (the oracle) needs tight Clarabel tolerances (gap/feasibility 1e-12): with them the two
+  agree to 3.4e-8 (default tolerances: only 1.3e-6). Small-ε expansion E f − √(2ε Var f): error/ε ratio between successive ε ≤ 1.20.
+- **KL robust bet:** the DESIGN's joint Newton (ForwardDiff) is replaced by a simpler, prototyped scheme: for fixed λ the
+  robust bet is the CRRA bet with γ = 1 + 1/λ (ADR-005), solved by the existing polish generalized to weights
+  Q ∝ π·V^{−1/λ} (gradient r^Q, Hessian −(1+k)E_Q[yyᵀ] + k r rᵀ with k = 1/λ, y = X/V); the outer 1-D search finds λ* with
+  D(Q*‖π) = ε (envelope theorem: dH/dλ = D − ε), seeded by the joint conic λ. 83 of 83 interior cases: KKT under Q* ≤ 1.6e-14,
+  |D − ε| ≤ 8e-15, bets within solver tolerance of the joint conic (5e-5), values within 9e-7.
+- **New result — the "cash radius":** in 37 of 120 cases the robust bet is all cash. The exact test is
+  ε ≥ D_min, where D_min = min{ D(Q‖π) : no bet has positive expected excess return under Q } — the KL distance from the model
+  to the nearest "no-edge" world (the I-projection, Q ∝ π·exp(−Σ μ_j (X_j − 1)), μ ≥ 0, solved by active-set Newton). It
+  classified all 120 cases exactly like the joint conic, with certificates max_j E_Q[X_j] − 1 ≤ 4.5e-16. When no Q removes every
+  edge (some bet combination beats cash in every scenario), D_min = ∞ and the robust bet never goes to cash.
+- **Consequence:** ForwardDiff is not needed for the KL ball. Whether the Wasserstein ball needs it is decided when Task 038 is
+  prototyped; unused dependencies are removed in Task 039.
+
+Sequence (full task text is written when the previous task is green):
+033. `kl_worst_case` (1-D dual) and `kl_inner_direct` (tight conic oracle) — T-ORC-4, T-ORC-7
+034. `polish_log_optimal` generalized to CRRA weights (`k = 1/λ`; `k = 0` path unchanged)
+035. `kl_cash_radius` — the no-edge I-projection D_min with its certificate
+036. `RobustResult` + `kl_robust_allocation` (conic seed → cash test → λ search with CRRA polish → saddle certification) —
+     T-ORC-6, T-ORC-10 (KL)
+037. `wasserstein_worst_case` (exact breakpoint scan) + transport-LP oracle — T-ORC-9 (ii)
+038. `wasserstein_robust_allocation` — T-ORC-9 (i), T-ORC-10 (W), T-ORC-11 (prototype first)
+039. `kl_radius_chi2` (T-DIA-7); DESIGN §5.6/§5.9 and ADR-004/005 updated to the implemented algorithms; dependency clean-up
+040. CHANGELOG for M5 + full gate run
+
+---
+
+## Task 033: KL worst case for a fixed bet — dual and direct oracle (T-ORC-4, T-ORC-7)
+**Status:** [ ] Pending
+**Milestone:** M5
+**Depends on:** 032
+
+### What to do
+Create `code/src/robust.jl`, include it from `src/Kelly_KL.jl` after `diagnostics.jl`, export `kl_worst_case` and `kl_inner_direct`.
+- `kl_worst_case(m::ScenarioModel, a, ε)` → `(value, λ, Q)` (DESIGN §5.6), with `Q` over the positive-probability scenarios
+  `pos = findall(>(0.0), m.π)`. Validate `ε ≥ 0`, `length(a) == size(m.X, 2)`, all `V = m.X[pos, :] * a` positive (`ArgumentError`). Implement exactly:
+  ```julia
+  p = m.π[pos]; f = log.(m.X[pos, :] * a); fmin = minimum(f); g = f .- fmin
+  (ε == 0 || maximum(g) ≤ 1e-15) && return (sum(p .* f), Inf, p)
+  mins = g .≤ 0.0; D0 = -log(sum(p[mins]))                 # D(Q‖π) of the limit λ → 0
+  if ε ≥ D0                                               # the ball contains the worst scenario(s) outright
+      Q = p .* mins; Q ./= sum(Q); return (fmin, 0.0, Q)
+  end
+  Qof(λ) = (lw = log.(p) .- g ./ λ; lw .-= maximum(lw); Q = exp.(lw); Q ./ sum(Q))
+  D(λ) = kl(Qof(λ), p)
+  λ = sqrt(sum(p .* g .^ 2) / (2ε)) + 1e-300                # small-ε scale as a start
+  lo = λ; while D(lo) ≤ ε; lo /= 2; end
+  hi = λ; while D(hi) > ε; hi *= 2; end
+  l, h = log(lo), log(hi)
+  for _ in 1:300
+      mid = (l + h) / 2
+      D(exp(mid)) > ε ? (l = mid) : (h = mid)
+      h - l ≤ 1e-15 && break
+  end
+  λ = exp((l + h) / 2); Q = Qof(λ)
+  return (sum(Q .* f), λ, Q)
+  ```
+  Docstring: worst-case expected log growth over the KL ball {Q : D(Q‖π) ≤ ε}; Q* ∝ π·e^{−f/λ*}; a KL ball cannot put mass on
+  scenarios π gives zero probability.
+- `kl_inner_direct(m::ScenarioModel, a, ε)` → `(value, Q)`: the direct conic solve (test oracle). Over `pos`: variables `Q ≥ 0`,
+  `r`; minimize `sum(Q .* f)` subject to `sum(Q) == 1`, `sum(r) ≤ ε`, `[-r[s], Q[s], p[s]] ∈ MOI.ExponentialCone()` for each s
+  (⇔ r_s ≥ Q_s log(Q_s/p_s)). Clarabel with `JuMP.set_optimizer_attribute` `"tol_gap_abs" => 1e-12`, `"tol_gap_rel" => 1e-12`,
+  `"tol_feas" => 1e-12`, `"max_iter" => 500`; status check as in `solve_conic` (`SolverError`).
+Create `code/test/test_robust.jl` with `@testset "robust: KL worst case (T-ORC-4, T-ORC-7)"` (StableRNG):
+- **T-ORC-4**, seed 1601, `QUICK ? 50 : 200` cases: `S = rand(rng, 4:39)`, `n = rand(rng, 2:8)`, `π` normalized `randexp(rng, S)`,
+  `W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]`, `m = correlated_bets(π, W)`, `a` normalized
+  `randexp(rng, n + 1)`, `ε = exp(log(1e-4) + rand(rng) * (0 - log(1e-4)))`; `(v, λ, Q) = kl_worst_case(m, a, ε)`;
+  `(vd, Qd) = kl_inner_direct(m, a, ε)`; `@test abs(v - vd) ≤ 1e-7`; `f = log.(m.X * a)` (all rows have π > 0 here);
+  `@test abs(sum(Q .* f) - v) ≤ 1e-12`; if `0 < λ < Inf`: `@test abs(kl(Q, m.π) - ε) ≤ 1e-10`, else `@test kl(Q, m.π) ≤ ε + 1e-12`.
+  (Prototype: |dual − direct| ≤ 3.4e-8, |D − ε| ≤ 7e-16.)
+- **Point mass:** `m2 = correlated_bets([0.9, 0.1], [2.0; 0.0;;])`, `a2 = [0.5, 0.5]` (V = [1.5, 0.5]):
+  `(v, λ, Q) = kl_worst_case(m2, a2, -log(0.1) + 0.01)` gives `λ == 0.0`, `Q == [0.0, 1.0]`, `v == log(0.5)`.
+- **ε = 0:** `kl_worst_case(m2, a2, 0.0)[1] ≈ 0.9 * log(1.5) + 0.1 * log(0.5)` (atol 1e-15).
+- **T-ORC-7**, seed 1602, 20 cases (same generator): `mean_f`, `var_f` under π; `e = [abs(kl_worst_case(m, a, ε)[1] - (mean_f - sqrt(2ε * var_f))) / ε for ε in (1e-4, 1e-5, 1e-6)]`;
+  `@test e[2] / e[1] ≤ 2` and `@test e[3] / e[2] ≤ 2` (prototype max 1.20).
+- **Validation:** `ε = -0.1` and a bet that leaves some V ≤ 0 throw `ArgumentError`.
+Add `include("test_robust.jl")` to `test/runtests.jl`. Stage with `git add -A` and commit with message
+`feat(robust): kl_worst_case (dual) and kl_inner_direct (oracle) — T-ORC-4, T-ORC-7`.
+
+### Files touched
+- `code/src/robust.jl` — new; `code/src/Kelly_KL.jl` — include + exports (one concern: KL inner worst case)
+- `code/test/test_robust.jl` — new; `code/test/runtests.jl` — include line
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `robust: KL worst case (T-ORC-4, T-ORC-7)` shows ≥ 200 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 033 FAILED — [which of 1–3] — [part, seed, case, dual vs direct or D − ε] — [error text]`
