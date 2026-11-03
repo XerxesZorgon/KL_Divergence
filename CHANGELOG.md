@@ -26,6 +26,10 @@ completed task (AGENTS.md Part 7).
 - Task 024: `predictive_from_draws` (dependent posteriors)
 - Task 025: `sampled_payoffs`, `growth_se` (payoff uncertainty)
 - Task 026: T-ERR-3 errata test — the parent article's weak-prior reduction is not reproduced
+- Task 028: `growth_loss`, `holdout_logscore`, `logscore_difference` (T-DIA-5)
+- Task 029: `growth_curve`, `zero_growth_point` (T-DIA-3)
+- Task 030: `drawdown_probability`, `effective_multiple`, `ruin_probability_classical`, `n_detect`, `n_relative` (T-DIA-1, 2, 4)
+- Task 031: `simulate_ruin` with `fixed_stake`, `target` and `min_fraction` (T-DIA-6)
 
 ### Changed
 - Tasks 012–013, 015: E1 experiment, plot and results moved to `experiments/` and refactored to call Kelly_KL; outputs byte-identical to `e1-original`

@@ -1514,7 +1514,7 @@ Stage with `git add -A` and commit with message `feat(diagnostics): growth_curve
 ---
 
 ## Task 030: Drawdown law, classical ruin, effective multiple, sample sizes (T-DIA-1, T-DIA-2, T-DIA-4)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-03, commit fce3c45)
 **Milestone:** M4
 **Depends on:** 029
 
@@ -1556,3 +1556,89 @@ Stage with `git add -A` and commit with message `feat(diagnostics): drawdown law
 
 ### On Failure
 `TASK 030 FAILED — [which of 1–3] — [assertion, p/N/x, expected vs got] — [error text]`
+
+**Result:** 619 Pass; QUICK suite 36 774 Pass.
+
+---
+
+## Task 031: Ruin simulator (T-DIA-6)
+**Status:** [ ] Pending
+**Milestone:** M4
+**Depends on:** 030
+
+### What to do
+In `code/src/diagnostics.jl` add and export `simulate_ruin`, implemented exactly as below (prototyped 2026-11-03 in
+Julia 1.13 with Xoshiro: even-money unit bets p = 0.48, from 10 to 20, 10⁵ trials gave 0.69224 vs classical 0.69007,
+z = 1.49, 6.4 s; it also reproduced the drawdown law Pr(min W/w0 ≤ x) = x^(2/c−1) to within Monte Carlo error for
+c = 0.5, 1 at x = 0.5, 0.25 — e.g. c = 1, x = 0.5: 0.476 vs 0.5):
+```julia
+function simulate_ruin(m::ScenarioModel, a; rng, trials::Integer, rounds::Integer, w0 = 1.0, min_stake = 0.0, lot = 0.0,
+                       fixed_cost = 0.0, fixed_stake = nothing, target = Inf)
+    S, J = size(m.X)
+    (trials ≥ 1 && rounds ≥ 1) || throw(ArgumentError("trials and rounds must be ≥ 1"))
+    length(a) == J || throw(ArgumentError("length(a) = $(length(a)) != number of assets $J"))
+    (w0 > 0 && min_stake ≥ 0 && lot ≥ 0 && fixed_cost ≥ 0 && target > w0) ||
+        throw(ArgumentError("need w0 > 0, min_stake ≥ 0, lot ≥ 0, fixed_cost ≥ 0, target > w0"))
+    (fixed_stake === nothing || fixed_stake > 0) || throw(ArgumentError("fixed_stake must be > 0"))
+    bets = m.has_cash ? (2:J) : (1:J); cum = cumsum(m.π)
+    ruined = 0; maxdd = zeros(trials); final = zeros(trials); minf = zeros(trials)
+    for t in 1:trials
+        W = w0; peak = w0; dd = 0.0; ruin = false; lo = w0
+        for _ in 1:rounds
+            s = min(searchsortedfirst(cum, rand(rng) * cum[end]), S)
+            if fixed_stake === nothing
+                stakes = [a[j] * W for j in bets]
+                lot > 0 && (stakes = floor.(stakes ./ lot) .* lot)
+            else
+                stakes = zeros(length(bets)); stakes[1] = min(fixed_stake, W)
+            end
+            stakes[stakes .< min_stake] .= 0.0                     # bets below the minimum are skipped
+            placed = count(>(0.0), stakes)
+            W = W - sum(stakes) - fixed_cost * placed + sum(stakes[i] * m.X[s, bets[i]] for i in eachindex(bets))
+            peak = max(peak, W); dd = max(dd, 1 - W / peak); lo = min(lo, W)
+            if W ≤ 0 || (min_stake > 0 && W < min_stake); ruin = true; break; end
+            W ≥ target && break
+        end
+        ruined += ruin; maxdd[t] = dd; final[t] = max(W, 0.0); minf[t] = max(lo, 0.0) / w0
+    end
+    p = ruined / trials
+    return (p_ruin = p, se = sqrt(p * (1 - p) / trials), drawdown_q = quantile(maxdd, [0.5, 0.9, 0.99]),
+            final_q = quantile(final, [0.1, 0.5, 0.9]), min_fraction = minf)
+end
+```
+Docstring: proportional staking (`a` times current wealth on each bet; cash is never staked) unless `fixed_stake` is given
+(then a fixed stake on the first bet asset — the classical gambler's-ruin game); `lot` rounds stakes down; stakes below
+`min_stake` are skipped; `fixed_cost` is charged per placed bet; ruin when wealth ≤ 0 or falls below `min_stake`; a trial
+stops at ruin, at `target`, or after `rounds`. `drawdown_q` are quantiles of the maximum drawdown from the running peak;
+`min_fraction` holds each trial's lowest wealth as a fraction of `w0` (for the drawdown law, E4).
+In `code/docs/DESIGN.md` §4.5, `simulate_ruin` row: add the keywords `fixed_stake = nothing`, `target = Inf` and the output
+`min_fraction`, with "(Task 031: needed to check the classical gambler's-ruin formula, T-DIA-6, and the drawdown law, E4)".
+Add to `code/test/test_diagnostics.jl` a new `@testset "diagnostics: ruin simulator (T-DIA-6)"` (StableRNG):
+(a) **No ruin for Kelly with cash:** `ms = simultaneous_bets([0.3, 0.25], [4.0, 6.0])`, `r = optimal_allocation(ms)`;
+`sim = simulate_ruin(ms, r.a; rng = StableRNG(1501), trials = QUICK ? 200 : 1000, rounds = 200)`; `@test sim.p_ruin == 0.0`;
+`@test all(>(0.0), sim.final_q)`.
+(b) **Classical game:** `m1 = ScenarioModel([0.48, 0.52], [1.0 2.0; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :single_event)`;
+`sim = simulate_ruin(m1, [1.0, 0.0]; rng = StableRNG(1502), trials = QUICK ? 10_000 : 100_000, rounds = 100_000, w0 = 10.0, min_stake = 1.0, fixed_stake = 1.0, target = 20.0)`;
+`P = ruin_probability_classical(0.48, 10, 20)`; `@test sim.se > 0`; `@test abs(sim.p_ruin - P) ≤ 3 * sim.se`.
+(c) **Overbetting raises drawdowns:** `mk = ScenarioModel([0.505, 0.495], [1.0 2.0; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :single_event)`, `b = 0.01`;
+`s1 = simulate_ruin(mk, [1 - b, b]; rng = StableRNG(1503), trials = 300, rounds = 20_000)`,
+`s25 = simulate_ruin(mk, [1 - 2.5b, 2.5b]; rng = StableRNG(1503), trials = 300, rounds = 20_000)`;
+`@test s25.drawdown_q[1] > s1.drawdown_q[1]` and `@test s25.final_q[2] < s1.final_q[2]`.
+(d) **Lot rounding:** `sim = simulate_ruin(mk, [1 - b, b]; rng = StableRNG(1504), trials = 50, rounds = 100, lot = 0.1)` (the 0.01 stake
+rounds down to 0, so no bet is ever placed): `@test sim.p_ruin == 0.0` and `@test all(==(1.0), sim.final_q)`.
+(e) **Validation:** `trials = 0`, `target = 0.5` (with w0 = 1), and `a` of the wrong length each throw `ArgumentError`.
+Stage with `git add -A` and commit with message `feat(diagnostics): simulate_ruin (T-DIA-6)`.
+
+### Files touched
+- `code/src/diagnostics.jl`, `code/src/Kelly_KL.jl` (export), `code/docs/DESIGN.md` §4.5 — one concern: ruin simulation
+- `code/test/test_diagnostics.jl` — new testset
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `diagnostics: ruin simulator (T-DIA-6)` shows ≥ 11 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. report the testset's wall time;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 031 FAILED — [which of 1–4] — [part, observed vs expected, se] — [error text]`
