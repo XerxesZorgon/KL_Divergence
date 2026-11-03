@@ -52,12 +52,7 @@ end
 function kl_inner_direct(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real)
     pos, V = _validate_kl_inner_inputs(m, a, ε, "kl_inner_direct")
     p = m.π[pos]; f = log.(V); S_pos = length(pos)
-    model = JuMP.Model(Clarabel.Optimizer)
-    JuMP.set_silent(model)
-    JuMP.set_optimizer_attribute(model, "tol_gap_abs", 1e-12)
-    JuMP.set_optimizer_attribute(model, "tol_gap_rel", 1e-12)
-    JuMP.set_optimizer_attribute(model, "tol_feas", 1e-12)
-    JuMP.set_optimizer_attribute(model, "max_iter", 500)
+    model = _tight_clarabel_model()
     @variable(model, Q[1:S_pos] >= 0)
     @variable(model, r[1:S_pos])
     @constraint(model, sum(Q) == 1)
@@ -67,10 +62,8 @@ function kl_inner_direct(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real)
     end
     @objective(model, Min, sum(Q[s] * f[s] for s in 1:S_pos))
     JuMP.optimize!(model)
-    st = JuMP.termination_status(model)
-    st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) || throw(SolverError(string(st), "kl_inner_direct conic solve failed"))
-    Q_val = max.(JuMP.value.(Q), 0.0)
-    Q_val ./= sum(Q_val)
+    _check_optimal(model, "kl_inner_direct conic solve failed")
+    Q_val = _simplex_value(Q)
     return (sum(Q_val .* f), Q_val)
 end
 
@@ -122,14 +115,8 @@ end
 
 function kl_cash_radius_direct(m::ScenarioModel)
     m.has_cash || throw(ArgumentError("kl_cash_radius_direct needs a model with cash"))
-    pos = findall(>(0.0), m.π); p = m.π[pos]; S_pos = length(pos)
-    J = size(m.X, 2)
-    model = JuMP.Model(Clarabel.Optimizer)
-    JuMP.set_silent(model)
-    JuMP.set_optimizer_attribute(model, "tol_gap_abs", 1e-12)
-    JuMP.set_optimizer_attribute(model, "tol_gap_rel", 1e-12)
-    JuMP.set_optimizer_attribute(model, "tol_feas", 1e-12)
-    JuMP.set_optimizer_attribute(model, "max_iter", 500)
+    pos = findall(>(0.0), m.π); p = m.π[pos]; S_pos = length(pos); J = size(m.X, 2)
+    model = _tight_clarabel_model()
     @variable(model, Q[1:S_pos] >= 0)
     @variable(model, r[1:S_pos])
     @constraint(model, sum(Q) == 1)
@@ -146,10 +133,8 @@ function kl_cash_radius_direct(m::ScenarioModel)
 end
 
 function kl_robust_conic(m::ScenarioModel, ε::Real; solver::Symbol = :clarabel)
-    solver in (:clarabel, :scs) || throw(ArgumentError("solver must be :clarabel or :scs, got :$solver"))
     pos = findall(>(0.0), m.π); p = m.π[pos]; Xp = m.X[pos, :]; S_pos = length(pos); J = size(m.X, 2)
-    model = JuMP.Model(solver === :clarabel ? Clarabel.Optimizer : SCS.Optimizer)
-    JuMP.set_silent(model)
+    model = _conic_model(solver)
     @variable(model, a[1:J] >= 0)
     @variable(model, λ >= 0)
     @variable(model, t)
@@ -163,10 +148,8 @@ function kl_robust_conic(m::ScenarioModel, ε::Real; solver::Symbol = :clarabel)
     end
     @objective(model, Max, t - λ * Float64(ε))
     JuMP.optimize!(model)
-    st = JuMP.termination_status(model)
-    st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) || throw(SolverError(string(st), "kl_robust_conic solve failed (:$solver)"))
-    a_val = max.(JuMP.value.(a), 0.0)
-    return (a_val ./ sum(a_val), JuMP.value(λ))
+    _check_optimal(model, "kl_robust_conic solve failed (:$solver)")
+    return (_simplex_value(a), JuMP.value(λ))
 end
 
 """
@@ -240,6 +223,15 @@ function wasserstein_support(m::ScenarioModel, unseen, cost)
     return (Xs, Xt, C, p)
 end
 
+function _validate_wasserstein_inner(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real, unseen, cost, name::AbstractString)
+    (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("$name requires finite ε ≥ 0, got $ε"))
+    length(a) == size(m.X, 2) || throw(ArgumentError("length(a) = $(length(a)) != size(m.X, 2) = $(size(m.X, 2))"))
+    Xs, Xt, C, p = wasserstein_support(m, unseen, cost)
+    V = Xt * collect(Float64, a)
+    all(x -> isfinite(x) && x > 0.0, V) || throw(ArgumentError("all support scenarios must have Xt * a > 0"))
+    return Xt, C, p, V
+end
+
 """
     wasserstein_worst_case(m::ScenarioModel, a, ε; unseen = zeros(0, size(m.X, 2)), cost = :l1) -> (value, λ, Q)
 
@@ -249,11 +241,7 @@ model gives zero probability.
 """
 function wasserstein_worst_case(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real;
                                 unseen = zeros(0, size(m.X, 2)), cost = :l1)
-    (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("wasserstein_worst_case requires finite ε ≥ 0, got $ε"))
-    length(a) == size(m.X, 2) || throw(ArgumentError("length(a) = $(length(a)) != size(m.X, 2) = $(size(m.X, 2))"))
-    Xs, Xt, C, p = wasserstein_support(m, unseen, cost)
-    V = Xt * collect(Float64, a)
-    all(x -> isfinite(x) && x > 0.0, V) || throw(ArgumentError("all support scenarios must have Xt * a > 0"))
+    Xt, C, p, _ = _validate_wasserstein_inner(m, a, ε, unseen, cost, "wasserstein_worst_case")
     f = log.(Xt * a); S, T = size(C)
     cur = zeros(Int, S); events = Tuple{Float64,Int,Int,Int}[]       # (λ, s, old t, new t)
     for s in 1:S
@@ -294,18 +282,9 @@ end
 
 function wasserstein_inner_lp(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real;
                               unseen = zeros(0, size(m.X, 2)), cost = :l1)
-    (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("wasserstein_inner_lp requires finite ε ≥ 0, got $ε"))
-    length(a) == size(m.X, 2) || throw(ArgumentError("length(a) = $(length(a)) != size(m.X, 2) = $(size(m.X, 2))"))
-    Xs, Xt, C, p = wasserstein_support(m, unseen, cost)
-    V = Xt * collect(Float64, a)
-    all(x -> isfinite(x) && x > 0.0, V) || throw(ArgumentError("all support scenarios must have Xt * a > 0"))
+    _, C, p, V = _validate_wasserstein_inner(m, a, ε, unseen, cost, "wasserstein_inner_lp")
     f = log.(V); S, T = size(C)
-    model = JuMP.Model(Clarabel.Optimizer)
-    JuMP.set_silent(model)
-    JuMP.set_optimizer_attribute(model, "tol_gap_abs", 1e-12)
-    JuMP.set_optimizer_attribute(model, "tol_gap_rel", 1e-12)
-    JuMP.set_optimizer_attribute(model, "tol_feas", 1e-12)
-    JuMP.set_optimizer_attribute(model, "max_iter", 500)
+    model = _tight_clarabel_model()
     @variable(model, γ[1:S, 1:T] >= 0)
     for s in 1:S
         @constraint(model, sum(γ[s, t] for t in 1:T) == p[s])
@@ -313,17 +292,14 @@ function wasserstein_inner_lp(m::ScenarioModel, a::AbstractVector{<:Real}, ε::R
     @constraint(model, sum(γ[s, t] * C[s, t] for s in 1:S, t in 1:T) <= Float64(ε))
     @objective(model, Min, sum(γ[s, t] * f[t] for s in 1:S, t in 1:T))
     JuMP.optimize!(model)
-    st = JuMP.termination_status(model)
-    st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) || throw(SolverError(string(st), "wasserstein_inner_lp solve failed"))
+    _check_optimal(model, "wasserstein_inner_lp solve failed")
     return JuMP.objective_value(model)
 end
 
 function wasserstein_robust_conic(m::ScenarioModel, ε::Real, Xs::Matrix{Float64}, Xt::Matrix{Float64},
                                   C::Matrix{Float64}, p::Vector{Float64}; solver::Symbol = :clarabel)
-    solver in (:clarabel, :scs) || throw(ArgumentError("solver must be :clarabel or :scs, got :$solver"))
     S, T = size(C); J = size(m.X, 2)
-    model = JuMP.Model(solver === :clarabel ? Clarabel.Optimizer : SCS.Optimizer)
-    JuMP.set_silent(model)
+    model = _conic_model(solver)
     @variable(model, a[1:J] >= 0)
     @variable(model, λ >= 0)
     @variable(model, u[1:S])
@@ -332,18 +308,12 @@ function wasserstein_robust_conic(m::ScenarioModel, ε::Real, Xs::Matrix{Float64
                 [u[s] - λ * C[s, t], 1.0, sum(Xt[t, j] * a[j] for j in 1:J)] in MOI.ExponentialCone())
     @objective(model, Max, sum(p[s] * u[s] for s in 1:S) - λ * Float64(ε))
     JuMP.optimize!(model)
-    st = JuMP.termination_status(model)
-    st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) || throw(SolverError(string(st), "wasserstein_robust_conic solve failed (:$solver)"))
-    a_val = max.(JuMP.value.(a), 0.0)
-    a_val ./= sum(a_val)
+    _check_optimal(model, "wasserstein_robust_conic solve failed (:$solver)")
+    a_val = _simplex_value(a)
     Γ = [abs(JuMP.dual(con[s, t])[1]) for s in 1:S, t in 1:T]
     for s in 1:S
         rs = sum(@view(Γ[s, :]))
-        if rs > 0.0
-            Γ[s, :] .*= p[s] / rs
-        else
-            Γ[s, s] = p[s]
-        end
+        rs > 0.0 ? (Γ[s, :] .*= p[s] / rs) : (Γ[s, s] = p[s])
     end
     cost_Γ = sum(Γ .* C)
     if cost_Γ > ε
@@ -356,7 +326,7 @@ function wasserstein_robust_conic(m::ScenarioModel, ε::Real, Xs::Matrix{Float64
 end
 
 """
-    wasserstein_robust_allocation(m::ScenarioModel, ε; unseen = zeros(0, size(m.X, 2)), cost = :l1, solver = :clarabel, tol = CERT_TOL, gap_tol = 1e-7) -> RobustResult
+    wasserstein_robust_allocation(m::ScenarioModel, ε; unseen = zeros(0, size(m.X, 2)), cost = :l1, solver = :clarabel, tol = CERT_TOL, gap_tol = GAP_TOL) -> RobustResult
 
 Maximizes worst-case growth when an adversary may move mass (including onto `unseen` scenarios)
 at transport cost `≤ ε`; tied worst cases are certified by a duality gap `≤ gap_tol` instead of
@@ -364,7 +334,7 @@ a KKT residual (ADR-006, exception).
 """
 function wasserstein_robust_allocation(m::ScenarioModel, ε::Real;
                                        unseen = zeros(0, size(m.X, 2)), cost = :l1,
-                                       solver::Symbol = :clarabel, tol = CERT_TOL, gap_tol = 1e-7)
+                                       solver::Symbol = :clarabel, tol = CERT_TOL, gap_tol = GAP_TOL)
     (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("wasserstein_robust_allocation requires finite ε ≥ 0, got $ε"))
     (Xs, Xt, C, p) = wasserstein_support(m, unseen, cost)
     εf = Float64(ε)

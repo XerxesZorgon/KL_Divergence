@@ -18,6 +18,11 @@ export RobustResult, kl_worst_case, kl_inner_direct, kl_cash_radius, kl_robust_a
 const PROB_TOL = 1e-12
 const ACTIVE_TOL = 1e-12
 const CERT_TOL = 1e-10
+const GAP_TOL = 1e-7
+const DIRECT_TOL = 1e-12
+const DIRECT_MAX_ITER = 500
+const MAX_SIMULTANEOUS_BETS = 16
+const MAX_SAMPLED_SCENARIOS = 1_048_576
 const VALID_STRUCTURES = (:single_event, :simultaneous, :correlated, :sampled, :mixture)
 
 include("model.jl")

@@ -8,6 +8,14 @@ function require_pos_finite(v, label)
     i === nothing || throw(ArgumentError("$label[$i] = $(v[i]) must be finite and > 0 at index $i"))
 end
 
+function require_prob_01(v, label)
+    i = findfirst(x -> !(isfinite(x) && 0.0 <= x <= 1.0), v)
+    i === nothing || throw(ArgumentError("$label[$i] = $(v[i]) must be in [0, 1] at index $i"))
+end
+
+wins_bit(s::Integer, k::Integer) = ((s - 1) >> (k - 1)) & 1 == 1
+bet_assets(n::Integer, cash::Bool) = cash ? vcat(["cash"], ["bet_$k" for k in 1:n]) : ["bet_$k" for k in 1:n]
+
 struct ScenarioModel
     π::Vector{Float64}
     X::Matrix{Float64}
@@ -28,8 +36,7 @@ struct ScenarioModel
         s_π = sum(π_vec)
         (isfinite(s_π) && abs(s_π - 1.0) <= PROB_TOL) || throw(ArgumentError("rule 2 (probability sum): |sum(π) - 1| = $(abs(s_π - 1.0)) > $PROB_TOL (index 1)"))
         X_mat = Matrix{Float64}(X)
-        bad_x = findfirst(val -> !(isfinite(val) && val >= 0.0), X_mat)
-        bad_x === nothing || throw(ArgumentError("rule 3 (returns finite and ≥ 0): invalid X[$(bad_x[1]), $(bad_x[2])] = $(X_mat[bad_x]) at index $(Tuple(bad_x))"))
+        require_nonneg_finite(X_mat, "rule 3 (returns finite and ≥ 0): invalid X")
         if has_cash
             assets_vec[1] == "cash" || throw(ArgumentError("rule 4 (cash asset): assets[1] = \"$(assets_vec[1])\" != \"cash\" at index 1"))
             bad_c = findfirst(!=(1.0), @view X_mat[:, 1])
@@ -54,22 +61,19 @@ end
 function simultaneous_bets(p::AbstractVector{<:Real}, w::AbstractVector{<:Real}; cash::Bool = true)
     n = length(p)
     n == length(w) || throw(ArgumentError("simultaneous_bets: length(p)=$n != length(w)=$(length(w)) (index 1)"))
-    1 <= n <= 16 || throw(ArgumentError("simultaneous_bets: n = $n: n > 16 gives more than 65 536 scenarios"))
-    bad_p = findfirst(x -> !(isfinite(x) && 0.0 <= x <= 1.0), p)
-    bad_p === nothing || throw(ArgumentError("simultaneous_bets: p[$bad_p] = $(p[bad_p]) must be in [0, 1] at index $bad_p"))
+    1 <= n <= MAX_SIMULTANEOUS_BETS || throw(ArgumentError("simultaneous_bets: n = $n: n > $MAX_SIMULTANEOUS_BETS gives more than 65 536 scenarios"))
+    require_prob_01(p, "simultaneous_bets: p")
     require_pos_finite(w, "simultaneous_bets: w")
     S = 1 << n
-    wins(s, k) = ((s - 1) >> (k - 1)) & 1 == 1
-    π = [prod(wins(s, k) ? Float64(p[k]) : 1.0 - Float64(p[k]) for k in 1:n) for s in 1:S]
-    X_bets = [wins(s, k) ? Float64(w[k]) : 0.0 for s in 1:S, k in 1:n]
+    π = [prod(wins_bit(s, k) ? Float64(p[k]) : 1.0 - Float64(p[k]) for k in 1:n) for s in 1:S]
+    X_bets = [wins_bit(s, k) ? Float64(w[k]) : 0.0 for s in 1:S, k in 1:n]
     X = cash ? hcat(ones(S), X_bets) : X_bets
-    bet_names = ["bet_$k" for k in 1:n]
-    return ScenarioModel(π, X; assets = cash ? vcat(["cash"], bet_names) : bet_names, has_cash = cash, structure = :simultaneous)
+    return ScenarioModel(π, X; assets = bet_assets(n, cash), has_cash = cash, structure = :simultaneous)
 end
 
 function correlated_bets(P_joint::AbstractVector{<:Real}, W::AbstractMatrix{<:Real})
     S, n = size(W)
-    return ScenarioModel(P_joint, hcat(ones(S), W); assets = vcat(["cash"], ["bet_$k" for k in 1:n]), has_cash = true, structure = :correlated)
+    return ScenarioModel(P_joint, hcat(ones(S), W); assets = bet_assets(n, true), has_cash = true, structure = :correlated)
 end
 
 function payoffs_from_odds(o::AbstractVector{<:Real}; commission::Real = 0.0)

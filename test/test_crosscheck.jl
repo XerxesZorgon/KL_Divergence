@@ -7,17 +7,10 @@ using Kelly_KL: greedy_allocation, cover_update
     accepted = 0
     for _ in 1:100_000
         accepted == 1000 && break
-        n = rand(rng, 2:6)
-        xq = randexp(rng, n); q = xq ./ sum(xq)
-        xm = q .* exp.(0.5 .* randn(rng, n)); m_ = xm ./ sum(xm)
-        ohat = 1.0 ./ (m_ .* (1 + 0.1 * rand(rng)))
-        X = single_event(q, ohat).X
-        g = greedy_allocation(q, ohat)
-        r = X' * (q ./ (X * g))
-        strict_ok = all(j -> g[j] > 1e-12 ? g[j] > 1e-3 : r[j] < 1 - 1e-3, eachindex(g))
+        strict_ok, _, _, m_ev, g = rand_nondegen_single_event(rng)
         strict_ok || continue
         accepted += 1
-        ac, kc, itc = cover_update(X, q; tol = 1e-14)
+        ac, kc, itc = cover_update(m_ev.X, m_ev.π; tol = 1e-14)
         @test kc < 1e-14
         @test itc < 2_000_000
         @test maximum(abs.(ac .- g)) ≤ 1e-8

@@ -21,15 +21,7 @@ using Kelly_KL: greedy_allocation
     accepted = 0
     for _ in 1:100_000
         accepted == 1000 && break
-        n = rand(rng, 2:6)
-        xq = randexp(rng, n); q = xq ./ sum(xq)
-        xm = q .* exp.(0.5 .* randn(rng, n)); m_ = xm ./ sum(xm)
-        ohat = 1.0 ./ (m_ .* (1 + 0.1 * rand(rng)))
-        m_ev = single_event(q, ohat)
-        X = m_ev.X
-        g = greedy_allocation(q, ohat)
-        r_kkt = X' * (q ./ (X * g))
-        strict_ok = all(j -> g[j] > 1e-12 ? g[j] > 1e-3 : r_kkt[j] < 1 - 1e-3, eachindex(g))
+        strict_ok, q, ohat, m_ev, g = rand_nondegen_single_event(rng)
         strict_ok || continue
         accepted += 1
         r = optimal_allocation(q, ohat; method = :conic)

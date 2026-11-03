@@ -1,9 +1,34 @@
-function solve_conic(m::ScenarioModel; solver::Symbol = :clarabel)
+function _conic_model(solver::Symbol)
     solver in (:clarabel, :scs) || throw(ArgumentError("solver must be :clarabel or :scs, got :$solver"))
-    S, J = size(m.X)
-    pos = findall(>(0.0), m.π)                       # scenarios with π_s = 0 are excluded
     model = JuMP.Model(solver === :clarabel ? Clarabel.Optimizer : SCS.Optimizer)
     JuMP.set_silent(model)
+    return model
+end
+
+function _tight_clarabel_model()
+    model = _conic_model(:clarabel)
+    JuMP.set_optimizer_attribute(model, "tol_gap_abs", DIRECT_TOL)
+    JuMP.set_optimizer_attribute(model, "tol_gap_rel", DIRECT_TOL)
+    JuMP.set_optimizer_attribute(model, "tol_feas", DIRECT_TOL)
+    JuMP.set_optimizer_attribute(model, "max_iter", DIRECT_MAX_ITER)
+    return model
+end
+
+function _check_optimal(model, msg::AbstractString)
+    st = JuMP.termination_status(model)
+    st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) || throw(SolverError(string(st), msg))
+    return st
+end
+
+function _simplex_value(a)
+    a_val = max.(JuMP.value.(a), 0.0)
+    return a_val ./ sum(a_val)
+end
+
+function solve_conic(m::ScenarioModel; solver::Symbol = :clarabel)
+    J = size(m.X, 2)
+    pos = findall(>(0.0), m.π)                       # scenarios with π_s = 0 are excluded
+    model = _conic_model(solver)
     @variable(model, a[1:J] >= 0)
     @variable(model, t[1:length(pos)])
     @constraint(model, sum(a) == 1)
@@ -12,9 +37,7 @@ function solve_conic(m::ScenarioModel; solver::Symbol = :clarabel)
     end
     @objective(model, Max, sum(m.π[s] * t[k] for (k, s) in enumerate(pos)))
     JuMP.optimize!(model)
-    st = JuMP.termination_status(model)
-    st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) || throw(SolverError(string(st), "conic solve failed (:$solver)"))
-    a_val = max.(JuMP.value.(a), 0.0)
-    return a_val ./ sum(a_val)
+    _check_optimal(model, "conic solve failed (:$solver)")
+    return _simplex_value(a)
 end
 

@@ -14,8 +14,8 @@ using StableRNGs, Random, Statistics, LinearAlgebra
     rng = StableRNG(301)
     for _ in 1:1000
         n = rand(rng, 2:12)
-        xp = randexp(rng, n); p = xp ./ sum(xp)
-        xq = randexp(rng, n); q = xq ./ sum(xq)
+        p = rand_simplex(rng, n)
+        q = rand_simplex(rng, n)
         @test kl(p, p) == 0.0
         @test kl(p, q) ≥ 0
     end
@@ -30,8 +30,8 @@ end
     rng = StableRNG(1401)
     for _ in 1:200
         n = rand(rng, 2:8)
-        xp = randexp(rng, n); p = xp ./ sum(xp)
-        xq = randexp(rng, n); q = xq ./ sum(xq)
+        p = rand_simplex(rng, n)
+        q = rand_simplex(rng, n)
         o = 1 .+ 9 .* rand(rng, n)
         @test abs(growth_loss(single_event(p, o; cash = false), q) - kl(p, q)) ≤ 1e-12
     end
@@ -41,7 +41,7 @@ end
     for _ in 1:200
         S = rand(rng, 4:64)
         n = rand(rng, 2:11)
-        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
+        π = rand_simplex(rng, S)
         W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
         xπb = π .* exp.((2 * rand(rng)) .* randn(rng, S)); πb = xπb ./ sum(xπb)
         mt = correlated_bets(π, W)
@@ -55,9 +55,9 @@ end
     rng = StableRNG(1403)
     for _ in 1:200
         K = rand(rng, 2:10)
-        xp = randexp(rng, K); p = xp ./ sum(xp)
-        x1 = randexp(rng, K); π1 = x1 ./ sum(x1)
-        x2 = randexp(rng, K); π2 = x2 ./ sum(x2)
+        p = rand_simplex(rng, K)
+        π1 = rand_simplex(rng, K)
+        π2 = rand_simplex(rng, K)
         E = sum(p[i] * logscore_difference(π1, π2, [i]).mean for i in 1:K)
         @test abs(E - (kl(p, π2) - kl(p, π1))) ≤ 1e-12
     end

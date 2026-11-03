@@ -2359,3 +2359,57 @@ and to `### Removed`: "Task 040: ForwardDiff dependency". Then run the **full** 
 
 ### On Failure
 `TASK 041 FAILED — [which of 1–4] — [failing testset and message] — [error text]`
+
+**Attempt 1 (2026-11-03): FAILED** — full run 51 743 / 51 744 Pass (2 m 49 s); full Wasserstein-robust testset 728 Pass,
+`:kkt` 83 / `:duality_gap` 17, largest gap 1.17e-8. Failure: `robust: KL cash radius` (c), seed 1802, case 173 (S = 7, n = 2):
+`kl_cash_radius` returned Inf, the direct solve 2.0094 (ALMOST_OPTIMAL). Real bug in Task 035: undamped Newton on the dual
+overshot, the ratio test reset μ to 0, and the add/drop cycle repeated until the loop ended, which was then misread as "Inf".
+Re-prototyped (2026-11-03) on 3 000 random models against an exact HiGHS LP feasibility test: projected Newton with Armijo
+line search (residual-based acceptance near the optimum, where φ is flat to rounding) + Levenberg regularization (more bets than
+scenarios) + exact infinity proofs: 2 577/2 577 feasible cases finite with certificate ≤ 9.4e-14, 422/423 infeasible cases
+proved Inf, 1 nearly degenerate case undecided (now a `CertificationError`). Old solver: 108 unresolved.
+
+### Fix 041a
+Replace the whole of `kl_cash_radius` in `code/src/robust.jl` with exactly:
+```julia
+function kl_cash_radius(m::ScenarioModel; maxit = 2000, tol = 1e-13)
+    m.has_cash || throw(ArgumentError("kl_cash_radius needs a model with cash"))
+    pos = findall(>(0.0), m.π); p = m.π[pos]
+    Y = m.X[pos, 2:end] .- 1.0; n = size(Y, 2); μ = zeros(n)
+    φ(μ) = (z = -(Y * μ) .+ log.(p); mz = maximum(z); -(mz + log(sum(exp.(z .- mz)))))   # concave dual; = D_min at the optimum
+    Qof(μ) = (lw = log.(p) .- Y * μ; lw .-= maximum(lw); Q = exp.(lw); Q ./ sum(Q))   # Q ∝ π·exp(−Σ μ_j (X_j − 1))
+    kkt(μ, g) = max(maximum(abs, g[μ .> 0]; init = 0.0), maximum(g[μ .== 0]; init = 0.0))
+    φmax = log(1 / minimum(p))                     # D(Q‖π) ≤ log(1/π_min) for every Q
+    for _ in 1:maxit                               # projected Newton (Bertsekas) on max φ(μ), μ ≥ 0
+        Q = Qof(μ); g = Y' * Q; k0 = kkt(μ, g)
+        k0 ≤ tol && break
+        F = findall(j -> μ[j] > 0 || g[j] > 0, 1:n)
+        YF = Y[:, F]; c = YF' * Q
+        H = -(YF' * (YF .* Q) .- c * c')           # = −Cov_Q(Y_F)
+        d = zeros(n); d[F] = (H - (1e-12 + norm(g[F])) * I) \ (-g[F])   # Levenberg: ascent even when H is singular
+        t = 1.0; φ0 = φ(μ)
+        while t > 1e-16
+            μn = max.(μ .+ t .* d, 0.0)
+            if k0 > 1e-6
+                φ(μn) ≥ φ0 + 1e-4 * dot(g, μn .- μ) && break      # far from the optimum: Armijo on φ
+            else
+                kkt(μn, Y' * Qof(μn)) < k0 && break               # near it φ is flat to rounding: accept a smaller KKT residual
+            end
+            t /= 2
+        end
+        μn = max.(μ .+ t .* d, 0.0); μn == μ && break; μ = μn
+        # exact proofs that no no-edge world exists: the dual exceeds every possible D, or μ is a bet mix beating cash everywhere
+        (φ(μ) > φmax + 1e-9 || minimum(Y * μ) > 0) && return (Inf, Qof(μ))
+    end
+    all(==(0.0), μ) && return (0.0, p)             # no bet has an edge under π
+    Q = Qof(μ)
+    minimum(Y * μ) > 0 && return (Inf, Q)
+    cert = maximum(Y' * Q)
+    cert > 1e-12 && throw(CertificationError(cert, 1e-12, :kl, "cash radius undecided (nearly degenerate model)"))
+    return (max(kl(Q, p), 0.0), Q)
+end
+```
+Keep the docstring; add to it: "Projected Newton on the dual; `Inf` is returned only with a proof; an undecidable, nearly degenerate
+model throws `CertificationError`." Then rerun the **full** reference suite and commit as in Task 041 (CHANGELOG `### Fixed` gains
+"Task 041: `kl_cash_radius` — projected Newton with line search; infinite radius now proved, not inferred").
+Acceptance as Task 041.

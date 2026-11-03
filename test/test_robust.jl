@@ -1,17 +1,13 @@
 using StableRNGs, Random, Distributions
-using Kelly_KL: kl_cash_radius_direct, greedy_allocation, polish_crra, kl_robust_conic, wasserstein_inner_lp
+using Kelly_KL: kl_cash_radius_direct, greedy_allocation, polish_crra, wasserstein_inner_lp
 
 @testset "robust: KL worst case (T-ORC-4, T-ORC-7)" begin
     # T-ORC-4, seed 1601
     rng = StableRNG(1601)
     N4 = QUICK ? 50 : 200
     for _ in 1:N4
-        S = rand(rng, 4:39)
-        n = rand(rng, 2:8)
-        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
-        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
-        m = correlated_bets(π, W)
-        xa = randexp(rng, n + 1); a = xa ./ sum(xa)
+        m = rand_correlated_model(rng, 4:39, 2:8)
+        a = rand_simplex(rng, size(m.X, 2))
         ε = exp(log(1e-4) + rand(rng) * (0 - log(1e-4)))
         (v, λ, Q) = kl_worst_case(m, a, ε)
         (vd, Qd) = kl_inner_direct(m, a, ε)
@@ -39,12 +35,8 @@ using Kelly_KL: kl_cash_radius_direct, greedy_allocation, polish_crra, kl_robust
     # T-ORC-7, seed 1602, 20 cases
     rng = StableRNG(1602)
     for _ in 1:20
-        S = rand(rng, 4:39)
-        n = rand(rng, 2:8)
-        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
-        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
-        m = correlated_bets(π, W)
-        xa = randexp(rng, n + 1); a = xa ./ sum(xa)
+        m = rand_correlated_model(rng, 4:39, 2:8)
+        a = rand_simplex(rng, size(m.X, 2))
         f = log.(m.X * a)
         mean_f = sum(m.π .* f)
         var_f = sum(m.π .* (f .- mean_f) .^ 2)
@@ -68,11 +60,7 @@ end
     # (b) Kelly-cash ⇔ zero radius, seed 1801, 200 single events with cash
     rng = StableRNG(1801)
     for _ in 1:200
-        n = rand(rng, 2:12)
-        xq = randexp(rng, n); q = xq ./ sum(xq)
-        xm = q .* exp.(0.5 .* randn(rng, n)); m_ = xm ./ sum(xm)
-        ρ = 0.3 * rand(rng)
-        ohat = payoffs_from_odds(1.0 ./ (m_ .* (1 + ρ)); commission = 0.2 * rand(rng))
+        q, ohat = rand_single_event_inputs(rng)
         @test (kl_cash_radius(single_event(q, ohat))[1] ≤ 1e-14) == (greedy_allocation(q, ohat)[1] == 1.0)
     end
 
@@ -81,11 +69,7 @@ end
     N_c = QUICK ? 50 : 200
     n_inf = 0
     for _ in 1:N_c
-        S = rand(rng, 4:64)
-        n = rand(rng, 2:11)
-        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
-        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
-        m = correlated_bets(π, W)
+        m = rand_correlated_model(rng)
         (r, Q) = kl_cash_radius(m)
         (rd, st) = kl_cash_radius_direct(m)
         if isfinite(r)
@@ -128,25 +112,20 @@ end
     N_b = QUICK ? 20 : 100
     n_cash = 0
     for _ in 1:N_b
-        S = rand(rng, 4:64)
-        n = rand(rng, 2:11)
-        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
-        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
-        m = correlated_bets(π, W)
+        m = rand_correlated_model(rng)
         ε = exp(log(1e-3) + rand(rng) * (log(0.5) - log(1e-3)))
         r = kl_robust_allocation(m, ε)
         r.a[1] == 1.0 && (n_cash += 1)
         @test r.kkt ≤ 1e-10
         @test abs(r.worst_case_growth - kl_worst_case(m, r.a, ε)[1]) ≤ 1e-10
+        J = size(m.X, 2)
         if 0 < r.λ < Inf
             @test abs(kl(r.Q, m.π) - ε) ≤ 1e-10
-            J = size(m.X, 2)
-            ac, ρc = polish_crra(m.X, m.π, fill(1 / J, J), 1 / r.λ)
+            ac, _ = polish_crra(m.X, m.π, fill(1 / J, J), 1 / r.λ)
             @test maximum(abs.(ac .- r.a)) ≤ 1e-8
         end
-        J = size(m.X, 2)
         for _ in 1:5
-            xb = randexp(rng, J); b = xb ./ sum(xb)
+            b = rand_simplex(rng, J)
             @test kl_worst_case(m, b, ε)[1] ≤ r.worst_case_growth + 1e-10
         end
     end
@@ -155,11 +134,7 @@ end
     # (c) T-ORC-10 (KL): seed 1902, 20 correlated models
     rng = StableRNG(1902)
     for _ in 1:20
-        S = rand(rng, 4:64)
-        n = rand(rng, 2:11)
-        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
-        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
-        m = correlated_bets(π, W)
+        m = rand_correlated_model(rng)
         @test maximum(abs.(kl_robust_allocation(m, 0.0).a .- optimal_allocation(m).a)) ≤ 1e-9
     end
 
@@ -172,14 +147,10 @@ end
     rng = StableRNG(2001)
     N_a = QUICK ? 60 : 300
     for _ in 1:N_a
-        S = rand(rng, 3:29)
-        n = rand(rng, 1:6)
-        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
-        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
-        m = correlated_bets(π, W)
-        T0 = rand(rng, 0:3)
-        unseen = hcat(ones(T0), [rand(rng) < 0.3 ? 1 + 4 * rand(rng) : 0.0 for t in 1:T0, k in 1:n])
-        xa = randexp(rng, n + 1); a = xa ./ sum(xa)
+        m = rand_correlated_model(rng, 3:29, 1:6)
+        J = size(m.X, 2)
+        unseen = rand_unseen(rng, J - 1)
+        a = rand_simplex(rng, J)
         ε = exp(log(1e-3) + rand(rng) * (log(3.0) - log(1e-3)))
         (v, λ, Q) = wasserstein_worst_case(m, a, ε; unseen)
         @test abs(v - wasserstein_inner_lp(m, a, ε; unseen)) ≤ 1e-7
@@ -216,13 +187,9 @@ end
     n_gap = 0
     max_gap = 0.0
     for _ in 1:N_a
-        S = rand(rng, 3:19)
-        n = rand(rng, 1:5)
-        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
-        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
-        m = correlated_bets(π, W)
-        T0 = rand(rng, 0:3)
-        unseen = hcat(ones(T0), [rand(rng) < 0.3 ? 1 + 4 * rand(rng) : 0.0 for t in 1:T0, k in 1:n])
+        m = rand_correlated_model(rng, 3:19, 1:5)
+        J = size(m.X, 2)
+        unseen = rand_unseen(rng, J - 1)
         ε = exp(log(1e-3) + rand(rng) * (log(2.0) - log(1e-3)))
         r = wasserstein_robust_allocation(m, ε; unseen)
         @test abs(r.worst_case_growth - wasserstein_worst_case(m, r.a, ε; unseen)[1]) ≤ 1e-10
@@ -233,9 +200,8 @@ end
             n_gap += 1
             max_gap = max(max_gap, r.kkt)
         end
-        J = size(m.X, 2)
         for _ in 1:5
-            xb = randexp(rng, J); b = xb ./ sum(xb)
+            b = rand_simplex(rng, J)
             @test wasserstein_worst_case(m, b, ε; unseen)[1] ≤ r.worst_case_growth + (r.certificate == :kkt ? 1e-10 : 1e-7)
         end
     end
@@ -244,11 +210,7 @@ end
     # (b) T-ORC-10 (W): seed 2102, 20 models
     rng = StableRNG(2102)
     for _ in 1:20
-        S = rand(rng, 3:19)
-        n = rand(rng, 1:5)
-        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
-        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
-        m = correlated_bets(π, W)
+        m = rand_correlated_model(rng, 3:19, 1:5)
         @test maximum(abs.(wasserstein_robust_allocation(m, 0.0).a .- optimal_allocation(m).a)) ≤ 1e-9
     end
 

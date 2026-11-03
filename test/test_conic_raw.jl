@@ -5,11 +5,7 @@ using Kelly_KL: solve_conic, greedy_allocation
     # (a) seed 601 (StableRNG), 200 random single events with cash
     rng = StableRNG(601)
     for _ in 1:200
-        n = rand(rng, 2:12)
-        xq = randexp(rng, n); q = xq ./ sum(xq)
-        xm = q .* exp.(0.5 .* randn(rng, n)); m_ = xm ./ sum(xm)
-        ρ = 0.3 * rand(rng)
-        ohat = payoffs_from_odds(1.0 ./ (m_ .* (1 + ρ)); commission = 0.2 * rand(rng))
+        q, ohat = rand_single_event_inputs(rng)
         # allocation distance is ill-conditioned near marginal bets (seed 601, trial 25: 1.0e-4 apart, growth gap 4.6e-10)
         m = single_event(q, ohat); a_c = solve_conic(m); a_g = greedy_allocation(q, ohat)
         @test growth(m, a_g) - growth(m, a_c) ≤ 1e-8

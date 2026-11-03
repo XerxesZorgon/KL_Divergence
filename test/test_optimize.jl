@@ -6,11 +6,7 @@ using Kelly_KL: greedy_allocation
     @testset "Single event with cash (seed 201)" begin
         rng = StableRNG(201)
         for _ in 1:1000
-            n = rand(rng, 2:12)
-            xq = randexp(rng, n); q = xq ./ sum(xq)
-            xm = q .* exp.(0.5 .* randn(rng, n)); m_ = xm ./ sum(xm)
-            ρ = 0.3 * rand(rng)
-            ohat = payoffs_from_odds(1.0 ./ (m_ .* (1 + ρ)); commission = 0.2 * rand(rng))
+            q, ohat = rand_single_event_inputs(rng)
             r = optimal_allocation(q, ohat)
             @test r.a == greedy_allocation(q, ohat)
             @test r.method == :greedy
@@ -23,7 +19,7 @@ using Kelly_KL: greedy_allocation
         rng = StableRNG(202)
         for _ in 1:1000
             n = rand(rng, 2:12)
-            xq = randexp(rng, n); q = xq ./ sum(xq)
+            q = rand_simplex(rng, n)
             o = 1 .+ 9 .* rand(rng, n)
             r = optimal_allocation(q, o; cash = false)
             @test r.a == q

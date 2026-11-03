@@ -8,16 +8,15 @@ uses exactly these posterior means — prior width alone does not change the bet
 function beta_predictive(α::AbstractVector{<:Real}, β::AbstractVector{<:Real})
     n = length(α)
     n ≥ 1 && length(β) == n || throw(ArgumentError("α and β must have equal length ≥ 1"))
-    (all(isfinite, α) && all(>(0), α) && all(isfinite, β) && all(>(0), β)) ||
-        throw(ArgumentError("α and β must be finite and > 0"))
+    require_pos_finite(α, "beta_predictive: α")
+    require_pos_finite(β, "beta_predictive: β")
     αf = collect(Float64, α)
-    βf = collect(Float64, β)
-    return αf ./ (αf .+ βf)
+    return αf ./ (αf .+ collect(Float64, β))
 end
 
 function dirichlet_predictive(α::AbstractVector{<:Real})
     length(α) ≥ 1 || throw(ArgumentError("α must have length ≥ 1"))
-    (all(isfinite, α) && all(>(0), α)) || throw(ArgumentError("α must be finite and > 0"))
+    require_pos_finite(α, "dirichlet_predictive: α")
     αf = collect(Float64, α)
     return αf ./ sum(αf)
 end
@@ -32,50 +31,34 @@ dependence between the bets' probabilities — prior width alone does not move t
 function predictive_from_draws(Pdraws::AbstractMatrix{<:Real}, w::AbstractVector{<:Real}; cash::Bool = true)
     M, n = size(Pdraws)
     M ≥ 1 && n == length(w) || throw(ArgumentError("Pdraws must have M ≥ 1 rows and length(w) columns"))
-    1 ≤ n ≤ 16 || throw(ArgumentError("n > 16 gives more than 65 536 scenarios"))
-    all(x -> isfinite(x) && 0.0 ≤ x ≤ 1.0, Pdraws) ||
-        throw(ArgumentError("Pdraws entries must be finite and in [0, 1]"))
+    1 ≤ n ≤ MAX_SIMULTANEOUS_BETS || throw(ArgumentError("n > $MAX_SIMULTANEOUS_BETS gives more than 65 536 scenarios"))
+    require_prob_01(Pdraws, "predictive_from_draws: Pdraws")
     Pf = Matrix{Float64}(Pdraws)
     base = simultaneous_bets(fill(0.5, n), w; cash)
-    S = 1 << n
-    wins(s, k) = ((s - 1) >> (k - 1)) & 1 == 1
-    π = [sum(prod(wins(s, k) ? Pf[m, k] : 1.0 - Pf[m, k] for k in 1:n) for m in 1:M) / M for s in 1:S]
+    π = [sum(prod(wins_bit(s, k) ? Pf[m, k] : 1.0 - Pf[m, k] for k in 1:n) for m in 1:M) / M for s in 1:(1 << n)]
     return ScenarioModel(π, base.X; assets = base.assets, has_cash = cash, structure = :mixture)
 end
 
 function sampled_payoffs(p::AbstractVector{<:Real}, samplers::AbstractVector, M::Integer; rng, cash::Bool = true)
     n = length(p)
     length(samplers) == n || throw(ArgumentError("p and samplers must have equal length"))
-    1 ≤ n ≤ 16 || throw(ArgumentError("1 ≤ n ≤ 16 required, got n = $n"))
+    1 ≤ n ≤ MAX_SIMULTANEOUS_BETS || throw(ArgumentError("1 ≤ n ≤ $MAX_SIMULTANEOUS_BETS required, got n = $n"))
     M ≥ 1 || throw(ArgumentError("M must be ≥ 1, got $M"))
-    B = 1 << n
-    S = M * B
-    S ≤ 1_048_576 || throw(ArgumentError("M * 2^n = $S exceeds 1_048_576"))
-    all(x -> isfinite(x) && 0.0 ≤ x ≤ 1.0, p) ||
-        throw(ArgumentError("win probabilities p must be finite and in [0, 1]"))
+    B = 1 << n; S = M * B
+    S ≤ MAX_SAMPLED_SCENARIOS || throw(ArgumentError("M * 2^n = $S exceeds $MAX_SAMPLED_SCENARIOS"))
+    require_prob_01(p, "sampled_payoffs: p")
     pf = collect(Float64, p)
     W = Matrix{Float64}(undef, M, n)
     for m in 1:M, k in 1:n
         sk = samplers[k]
         val = sk isa Distributions.Sampleable ? rand(rng, sk) : sk(rng)
-        (isfinite(val) && val > 0) ||
-            throw(ArgumentError("sampled payoff at m = $m, k = $k must be finite and > 0, got $val"))
+        (isfinite(val) && val > 0) || throw(ArgumentError("sampled payoff at m = $m, k = $k must be finite and > 0, got $val"))
         W[m, k] = Float64(val)
     end
-    wins(s, k) = ((s - 1) >> (k - 1)) & 1 == 1
-    π_block = [prod(wins(s, k) ? pf[k] : 1.0 - pf[k] for k in 1:n) / M for s in 1:B]
-    π = repeat(π_block, M)
-    X_bets = Matrix{Float64}(undef, S, n)
-    for m in 1:M, s in 1:B
-        r = (m - 1) * B + s
-        for k in 1:n
-            X_bets[r, k] = wins(s, k) ? W[m, k] : 0.0
-        end
-    end
+    π_block = [prod(wins_bit(s, k) ? pf[k] : 1.0 - pf[k] for k in 1:n) / M for s in 1:B]
+    X_bets = [wins_bit(mod1(r, B), k) ? W[cld(r, B), k] : 0.0 for r in 1:S, k in 1:n]
     X = cash ? hcat(ones(Float64, S), X_bets) : X_bets
-    bet_names = ["bet_$k" for k in 1:n]
-    assets = cash ? vcat(["cash"], bet_names) : bet_names
-    return ScenarioModel(π, X; assets = assets, has_cash = cash, structure = :sampled)
+    return ScenarioModel(repeat(π_block, M), X; assets = bet_assets(n, cash), has_cash = cash, structure = :sampled)
 end
 
 function growth_se(m::ScenarioModel, a::AbstractVector{<:Real})

@@ -29,11 +29,11 @@ function _validate_logscore_inputs(π::AbstractVector{<:Real}, y::AbstractVector
     all(yi -> 1 ≤ yi ≤ K, y) || throw(ArgumentError("$name: outcome indices y must be in 1:$K"))
 end
 
+_mean_se(v) = (n = length(v); (mean = mean(v), se = n ≥ 2 ? std(v) / sqrt(n) : NaN))
+
 function holdout_logscore(π::AbstractVector{<:Real}, y::AbstractVector{<:Integer})
     _validate_logscore_inputs(π, y, "holdout_logscore")
-    v = [log(Float64(π[yi])) for yi in y]
-    n = length(v)
-    return (mean = mean(v), se = n ≥ 2 ? std(v) / sqrt(n) : NaN)
+    return _mean_se([log(Float64(π[yi])) for yi in y])
 end
 
 """
@@ -47,9 +47,7 @@ function logscore_difference(π1::AbstractVector{<:Real}, π2::AbstractVector{<:
     length(π1) == length(π2) || throw(ArgumentError("logscore_difference: π1 and π2 must have equal length"))
     _validate_logscore_inputs(π1, y, "logscore_difference")
     _validate_logscore_prob(π2, "logscore_difference: π2")
-    v = [log(Float64(π1[yi])) - log(Float64(π2[yi])) for yi in y]
-    n = length(v)
-    return (mean = mean(v), se = n ≥ 2 ? std(v) / sqrt(n) : NaN)
+    return _mean_se([log(Float64(π1[yi])) - log(Float64(π2[yi])) for yi in y])
 end
 
 function growth_curve(m::ScenarioModel, a_star::AbstractVector{<:Real}, cs::AbstractVector{<:Real})

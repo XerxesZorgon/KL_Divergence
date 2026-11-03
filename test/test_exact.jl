@@ -25,8 +25,8 @@ using Kelly_KL: full_investment_allocation, greedy_allocation
         rng = StableRNG(102)
         for _ in 1:1000
             n = rand(rng, 2:12)
-            xp = randexp(rng, n); p = xp ./ sum(xp)
-            xq = randexp(rng, n); q = xq ./ sum(xq)
+            p = rand_simplex(rng, n)
+            q = rand_simplex(rng, n)
             o = 1 .+ 9 .* rand(rng, n)
             @test full_investment_allocation(q) == q
             X = Matrix(Diagonal(o))
@@ -41,12 +41,9 @@ using Kelly_KL: full_investment_allocation, greedy_allocation
     @testset "Greedy certification on multi-outcome events" begin
         rng = StableRNG(103)
         for _ in 1:1000
-            n = rand(rng, 2:12)
-            xq = randexp(rng, n); q = xq ./ sum(xq)
-            xm = q .* exp.(0.5 .* randn(rng, n)); m_ = xm ./ sum(xm)
-            ρ = 0.3 * rand(rng)
-            ohat = payoffs_from_odds(1.0 ./ (m_ .* (1 + ρ)); commission = 0.2 * rand(rng))
-            assert_certified(BetResult(single_event(q, ohat), greedy_allocation(q, ohat), :greedy), single_event(q, ohat))
+            q, ohat = rand_single_event_inputs(rng)
+            m = single_event(q, ohat)
+            assert_certified(BetResult(m, greedy_allocation(q, ohat), :greedy), m)
         end
     end
 
