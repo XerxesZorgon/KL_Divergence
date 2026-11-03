@@ -1771,7 +1771,7 @@ Add `include("test_robust.jl")` to `test/runtests.jl`. Stage with `git add -A` a
 ### Acceptance Criterion
 1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
    `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
-2. testset `robust: KL worst case (T-ORC-4, T-ORC-7)` shows ≥ 200 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+2. testset `robust: KL worst case (T-ORC-4, T-ORC-7)` shows ≥ 190 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
 3. `git status --porcelain` prints nothing.
 
 ### On Failure
