@@ -1,4 +1,4 @@
-using StableRNGs, Random
+using StableRNGs, Random, Distributions
 using Kelly_KL: kl_cash_radius_direct, greedy_allocation, polish_crra, kl_robust_conic, wasserstein_inner_lp
 
 @testset "robust: KL worst case (T-ORC-4, T-ORC-7)" begin
@@ -267,6 +267,18 @@ end
     # (d) KL results carry :kkt
     @test kl_robust_allocation(correlated_bets([0.6, 0.4], [2.0; 0.0;;]), 0.01).certificate == :kkt
 end
+
+@testset "robust: KL radius (T-DIA-7)" begin
+    @test abs(kl_radius_chi2(2, 100) - 0.01920729410347062) ≤ 1e-14
+    @test abs(kl_radius_chi2(5, 500; level = 0.99) - 0.013276704135987622) ≤ 1e-14
+    for K in (2, 3, 10), n in (10, 1000)
+        @test kl_radius_chi2(K, n) == quantile(Distributions.Chisq(K - 1), 0.95) / (2n)
+    end
+    @test_throws ArgumentError kl_radius_chi2(1, 10)
+    @test_throws ArgumentError kl_radius_chi2(3, 0)
+    @test_throws ArgumentError kl_radius_chi2(3, 10; level = 1.0)
+end
+
 
 
 

@@ -391,5 +391,21 @@ function wasserstein_robust_allocation(m::ScenarioModel, ε::Real;
     return RobustResult(a, L, growth(m, a), λ, Qw, Xt, gap, :wasserstein, εf, :duality_gap)
 end
 
+"""
+    kl_radius_chi2(K::Integer, n::Integer; level = 0.95) -> Float64
+
+Under the hypothesis that the model is right, `2n·D(p̂‖π)` is asymptotically `χ²_{K−1}` (G-test),
+so a KL ball of this radius around the empirical distribution of `n` observations over `K`
+outcomes covers the truth with probability ≈ `level`; asymptotic — E7 checks coverage by
+simulation; verify the Ben-Tal et al. (2013) direction convention before citing.
+"""
+function kl_radius_chi2(K::Integer, n::Integer; level::Real = 0.95)
+    K ≥ 2 || throw(ArgumentError("kl_radius_chi2 requires K ≥ 2, got $K"))
+    n ≥ 1 || throw(ArgumentError("kl_radius_chi2 requires n ≥ 1, got $n"))
+    (isfinite(level) && 0.0 < level < 1.0) || throw(ArgumentError("kl_radius_chi2 requires 0 < level < 1, got $level"))
+    return Distributions.quantile(Distributions.Chisq(K - 1), Float64(level)) / (2 * n)
+end
+
+
 
 

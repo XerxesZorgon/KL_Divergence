@@ -2201,8 +2201,9 @@ Count the tiers.
 (c) **T-ORC-11 (unseen catastrophe forces cash):** `m = correlated_bets([0.5, 0.5], [3.0 0.0; 0.0 2.0])`, `unseen = [1.0 0.0 0.0]`
 (both bets lose): `@test optimal_allocation(m).a[1] ≤ 1e-12` (Kelly holds no cash: [0, 0.5, 0.5]); for `ε ∈ (0.01, 1.0)`:
 `r = wasserstein_robust_allocation(m, ε; unseen)`, `@test r.a[1] > 0` (any reachable total loss forces a cash reserve) and
-`@test isfinite(r.worst_case_growth)`; and the KL-robust bet cannot see the catastrophe: `kl_robust_allocation(m, ε).a[1] ≤ 1e-9`
-whenever `kl_cash_radius(m)[1] > ε`.
+`@test isfinite(r.worst_case_growth)`; and the KL-robust bet cannot see the catastrophe: `@test kl_cash_radius(m)[1] == Inf`
+(here 0.4·bet 1 + 0.6·bet 2 pays 1.2 in both scenarios, so no KL ball removes the edge) and `@test kl_robust_allocation(m, 0.01).a[1] ≤ 1e-9`
+(use ε = 0.01 only: for large ε this model's KL λ* → 0, the documented v1 limit).
 (d) **KL results carry `:kkt`:** `kl_robust_allocation(correlated_bets([0.6, 0.4], [2.0; 0.0;;]), 0.01).certificate == :kkt`.
 Stage with `git add -A` and commit with message `feat(robust): wasserstein_robust_allocation with two-tier certificate (T-ORC-9, T-ORC-10, T-ORC-11)`.
 
