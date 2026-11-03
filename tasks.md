@@ -2586,5 +2586,62 @@ Stage with `git add -A` and commit with message `feat(experiments): E4 — overb
 ### On Failure
 `TASK 045 FAILED — [which of 1–4] — [the E4 lines with |z| > 3, or c0] — [error text]`
 
-**Result:** c0 = 1.996668, largest tested |z| = 1.84 (x ≤ 0.5), wall time 167.222 s; PASS.
+**Result:** c0 = 1.996668; max tested |z| = 1.84; wall 167.2 s; PASS.
 
+---
+
+## Task 046: E5 — minimum-stake ruin vs the classical formula
+**Status:** [x] Done (2026-11-03)
+**Milestone:** M6
+**Depends on:** 045
+
+### What to do
+`code/experiments/e5_min_stake_ruin.jl` has been placed in the folder by Claude (untracked; prototyped 2026-11-03 with the
+package's `model.jl` + `diagnostics.jl` on Xoshiro: 18 cells, max |z| = 1.57; PASS; 114 s). Use it as-is.
+(a) Classical gambler's ruin with unit stakes: p ∈ {0.48, 0.50, 0.52}, a ∈ {2, 5, 10, 15, 18}, N = 20, 10 000 trials per cell,
+`simulate_ruin(...; fixed_stake = 1, min_stake = 1, target = N)` vs `ruin_probability_classical`.
+(b) Kelly bettor (p = 0.525, b* = 0.05) with a 1-unit minimum stake: below 20 units the Kelly stake is under the minimum and
+every bet is skipped ("priced out"); Pr(priced out) from w0 ∈ {40, 100, 200} units vs the drawdown law at x = 20/w0, c = 1;
+1 000 trials each.
+Outputs `output/e5_classical.csv`, `output/e5_priced_out.csv`, `output/e5_ruin.svg` (+ copy to `../img/` unless `quick`),
+`output/e5_meta.toml`.
+**TEST_PLAN amendment:** in `docs/TEST_PLAN.md` §G, replace the E5 criterion with: "(a) minimum-stake ruin Monte Carlo vs the
+classical formula within 3 SE for p ∈ {0.48, 0.50, 0.52}, a ∈ {2, 5, 10, 15, 18}, N = 20 (even-money unit bets); (b) Kelly
+bettor with a minimum stake: Pr(wealth falls below minimum stake / b*, after which every Kelly stake is below the minimum)
+within 3 SE of the drawdown law x = (1/b*)/w0 for w0 ∈ {40, 100, 200} units (Task 046)".
+Run from `code/`: `julia --project=. experiments/e5_min_stake_ruin.jl`.
+Stage with `git add -A` and commit with message `feat(experiments): E5 — minimum-stake ruin`.
+
+### Files touched
+- `code/experiments/e5_min_stake_ruin.jl` — new (provided); `code/docs/TEST_PLAN.md` §G E5 row (one concern: experiment E5)
+
+### Acceptance Criterion
+1. The run exits 0, prints 15 lines starting `E5a:`, 3 lines starting `E5b:` and a final line `E5: PASS`; report the largest
+   |z| over all 18 lines;
+2. `experiments/output/e5_classical.csv` has 16 lines and `experiments/output/e5_priced_out.csv` has 4 lines;
+   `../img/e5_ruin.svg` exists; `experiments/output/e5_meta.toml` contains `pass = true`;
+3. report the wall time (from `e5_meta.toml`);
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 046 FAILED — [which of 1–4] — [the E5 lines with |z| > 3] — [error text]`
+
+**First run (2026-11-03): FAILED** — criterion 1: `E5b: start 200 units (x = 0.10): priced out 0.0670 ± 0.0079, drawdown law
+0.1000, z = -4.17`. Reproduced bit-for-bit by Claude (Julia 1.13.3, StableRNG 2005). Diagnosis: not a law failure — 10 other
+StableRNG seeds × 1 000 trials gave mean 0.0962 (10 000 trials) and two Xoshiro runs × 4 000 gave 0.1085 and 0.0965; the
+failing value is a ≈ 3.5-SE tail draw. Two design flaws made such a draw decisive: (i) the SE used the simulated P̂ (0.067),
+which shrinks the SE exactly when P̂ is low — a test of "P = law" should use the SE at the law's P; (ii) 1 000 trials is too few
+for P = 0.1 (SE ≈ 0.0095, i.e. ±10% relative).
+
+### Fix 046a
+`code/experiments/e5_min_stake_ruin.jl` has been replaced by Claude (same file name). Changes: SE = √(P(1−P)/trials) at the
+formula's P in both (a) and (b); 4 000 trials per start in (b) (was 1 000). Nothing else changed; part (a) uses the same random
+stream, so its simulated values are unchanged. Claude ran the replaced file once with StableRNG 2005 on Julia 1.13.3: PASS,
+max |z| = 2.00 (E5b, w0 = 200: 0.0905 vs 0.1000), 415 s. All three E5b values sit below the law (z = −1.96, −0.63, −2.00),
+consistent with the small low bias from wealth jumping past the floor (as in E4).
+**TEST_PLAN amendment (append to the E5 row already edited):** " SE is computed at the formula's probability; (b) uses 4 000
+trials per start (Fix 046a)."
+Then re-run Task 046 steps 2–7 (expect ≈ 7–12 min). Commit message: `feat(experiments): E5 — minimum-stake ruin (Fix 046a)`.
+Report `TASK 046 PASSED — max |z| [value], wall [s]` or `TASK 046 FAILED — …` as before.
+
+**Result (Fix 046a):** max |z| = 2.00, wall 594.534 s; PASS.
