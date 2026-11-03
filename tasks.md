@@ -2419,3 +2419,64 @@ largest gap 1.17e-8.
 
 **M5 complete (2026-11-03).** Gate met: T-ORC-4, 6, 7, 9, 10, 11 and T-DIA-7 green in the full run. Next: John's diff review
 (`git log --oneline 779c716~1..HEAD`), optional /refactor (robust.jl is the largest file), then M6 (experiments E2–E7).
+
+### /refactor (post-M5) — 2026-11-03
+16 files, −66 lines net, 0 blocked; QUICK green after each file; FULL 51 746 Pass (2 m 37 s). Reviewed: certified numerical
+blocks (kl_worst_case core, cash-radius loop, Wasserstein scan, λ search, structure iteration) match their task specs; shared
+test generators keep the RNG call order (same test count).
+M5 diff reviewed by John (2026-11-03): 9 commits 779c716…de253c7.
+
+---
+
+# Milestone M6 — Experiments E2–E7
+
+Each experiment is `experiments/eN_*.jl` with `main(; seed, out_dir = joinpath(@__DIR__, "output"), quick = false)`, writing CSV
+(`write_csv`), figures (`svg_plot`, also copied to `../../img/`), a `_meta.toml` (`write_meta`), and returning a NamedTuple whose
+`pass::Bool` field applies the TEST_PLAN §G criterion. Seeds use `StableRNG` (ADR-009). Figures share `experiments/plotting.jl`.
+
+Sequence (full task text is written when the previous task is green; each experiment is prototyped first):
+042. `experiments/plotting.jl` (shared SVG/CSV/meta helpers; E1's marker and legend wrapping moved there, SVG still byte-identical)
+043. E2 — holdout log-score difference estimates ΔKL
+044. E3 — model averaging vs the best single model
+045. E4 — overbetting cliff and drawdown law (figure)
+046. E5 — minimum-stake ruin vs the classical formula
+047. E6 — edge-CI coverage at n_detect
+048. E7 — Kelly vs KL-robust vs Wasserstein-robust with an unseen tail; KL-radius coverage (figure + table)
+049. `test/test_experiments_smoke.jl` (every `main(quick = true)` runs and passes) + CHANGELOG for M6 + full gate
+
+---
+
+## Task 042: Shared plotting helpers (`experiments/plotting.jl`)
+**Status:** [ ] Pending
+**Milestone:** M6
+**Depends on:** 041
+
+### What to do
+Create `code/experiments/plotting.jl` with exactly the content of the file attached to this task (copied into the repository by
+Claude as `code/experiments/plotting.jl` — use it as-is): constants `INK, INK2, GRID, BG, PALETTE, SHAPES`; `svg_marker` and
+`wrap_label` (moved verbatim from `e1_plot.jl`); `fmt_tick`; `svg_plot(path; series, xlim, ylim, xticks, yticks, xlabel, ylabel,
+xlog, hlines, vlines, legend_title, W, H)`; `write_csv(path, header, rows)`; `write_meta(path; seed, wall_seconds, extra)`.
+In `code/experiments/e1_plot.jl`: add `include(joinpath(@__DIR__, "plotting.jl"))` after the `using` line; delete its local
+`marker` function; replace each `marker(` call with `svg_marker(`; replace the legend's inline word-wrapping loop with
+`line1, line2 = wrap_label(label)`. Change nothing else (the SVG must stay byte-identical).
+Create `code/test/test_plotting.jl` with `@testset "experiments: plotting helpers"`: in `mktempdir()`, call `svg_plot` with one
+`:line` series, one `:points` series, an `hline` and a `vline`; `@test` the file starts with `"<svg"`, ends with `"</svg>\n"`,
+contains `"<polyline"` and `"<circle"`; `write_csv` then `readlines` gives the header and one row; `write_meta` then
+`TOML.parsefile` has keys `julia_version`, `git_commit`, `seed`, `wall_seconds`. Load the helpers in the test with
+`module Plotting; include(joinpath(@__DIR__, "..", "experiments", "plotting.jl")); end`. Add `include("test_plotting.jl")` to
+`test/runtests.jl` (before `test_e1.jl`).
+Stage with `git add -A` and commit with message `feat(experiments): shared plotting/CSV/meta helpers; E1 plot uses them`.
+
+### Files touched
+- `code/experiments/plotting.jl` — new; `code/experiments/e1_plot.jl` — uses the shared marker/wrap (one concern: figure helpers)
+- `code/test/test_plotting.jl` — new; `code/test/runtests.jl` — include line
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`; testset
+   `E1 (T-E1-1, T-E1-2)` shows 0 Fail (SVG byte-identical) and `experiments: plotting helpers` ≥ 9 Pass, 0 Fail;
+2. `git grep -n "function marker" -- experiments` prints nothing;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 042 FAILED — [which of 1–3] — [failing test / first differing SVG line] — [error text]`

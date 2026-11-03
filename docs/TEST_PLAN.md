@@ -76,7 +76,7 @@ Random tests use fixed seeds (StableRNG for new tests; E1 tests keep Xoshiro, AD
 | Exp | Pass criterion |
 |---|---|
 | E1 | as T-E1-1, T-E1-2 |
-| E2 | holdout log-score difference estimates ΔKL within 2 Monte Carlo SE in ≥ 95% of 1 000 replications |
+| E2 | share of 1 000 replications whose ±2 SE interval covers the true ΔKL lies within 3 binomial SE of the normal-theory 95.45% (i.e. 93.47–97.43%) — Task 043: '≥ 95%' would fail about 1 run in 10 by chance (binomial SE 0.66%) |
 | E3 | mean growth of BMA bet ≥ best single model bet across replications (paired difference > −2 SE) |
 | E4 | simulated Pr(drawdown to x) vs x^{2/c−1} for c ∈ {0.5, 1, 1.5}, small-edge discrete bets: within 3 SE, or the gap is reported with its size (law is a continuous-limit approximation) |
 | E5 | minimum-stake ruin Monte Carlo vs classical formula within 3 SE (even-money unit bets) |
