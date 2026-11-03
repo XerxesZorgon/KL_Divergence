@@ -143,3 +143,47 @@ end
     @test_throws ArgumentError effective_multiple(0.01, 0.0)
 end
 
+@testset "diagnostics: ruin simulator (T-DIA-6)" begin
+    # (a) No ruin for Kelly with cash
+    ms = simultaneous_bets([0.3, 0.25], [4.0, 6.0])
+    r = optimal_allocation(ms)
+    sim = simulate_ruin(ms, r.a; rng = StableRNG(1501), trials = QUICK ? 200 : 1000, rounds = 200)
+    @test sim.p_ruin == 0.0
+    @test all(>(0.0), sim.final_q)
+
+    # (b) Classical game
+    m1 = ScenarioModel([0.48, 0.52], [1.0 2.0; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :single_event)
+    sim_b = simulate_ruin(
+        m1,
+        [1.0, 0.0];
+        rng = StableRNG(1502),
+        trials = QUICK ? 10_000 : 100_000,
+        rounds = 100_000,
+        w0 = 10.0,
+        min_stake = 1.0,
+        fixed_stake = 1.0,
+        target = 20.0,
+    )
+    P = ruin_probability_classical(0.48, 10, 20)
+    @test sim_b.se > 0
+    @test abs(sim_b.p_ruin - P) ≤ 3 * sim_b.se
+
+    # (c) Overbetting raises drawdowns
+    mk = ScenarioModel([0.505, 0.495], [1.0 2.0; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :single_event)
+    b = 0.01
+    s1 = simulate_ruin(mk, [1 - b, b]; rng = StableRNG(1503), trials = 300, rounds = 20_000)
+    s25 = simulate_ruin(mk, [1 - 2.5b, 2.5b]; rng = StableRNG(1503), trials = 300, rounds = 20_000)
+    @test s25.drawdown_q[1] > s1.drawdown_q[1]
+    @test s25.final_q[2] < s1.final_q[2]
+
+    # (d) Lot rounding
+    sim_d = simulate_ruin(mk, [1 - b, b]; rng = StableRNG(1504), trials = 50, rounds = 100, lot = 0.1)
+    @test sim_d.p_ruin == 0.0
+    @test all(==(1.0), sim_d.final_q)
+
+    # (e) Validation
+    @test_throws ArgumentError simulate_ruin(mk, [1 - b, b]; rng = StableRNG(1505), trials = 0, rounds = 10)
+    @test_throws ArgumentError simulate_ruin(mk, [1 - b, b]; rng = StableRNG(1505), trials = 10, rounds = 10, target = 0.5)
+    @test_throws ArgumentError simulate_ruin(mk, [1.0]; rng = StableRNG(1505), trials = 10, rounds = 10)
+end
+

@@ -145,3 +145,47 @@ function n_relative(p::Real, w::Real; rel::Real = 0.10)
     return pf * (1.0 - pf) * wf^2 / (Float64(rel) * e)^2
 end
 
+"""
+    simulate_ruin(m::ScenarioModel, a; rng, trials, rounds, w0 = 1.0, min_stake = 0.0, lot = 0.0, fixed_cost = 0.0, fixed_stake = nothing, target = Inf)
+
+Monte Carlo ruin simulator: proportional staking (`a` times current wealth on each bet; cash is never staked)
+unless `fixed_stake` is given (then a fixed stake on the first bet asset — the classical gambler's-ruin game);
+`lot` rounds stakes down; stakes below `min_stake` are skipped; `fixed_cost` is charged per placed bet;
+ruin when wealth ≤ 0 or falls below `min_stake`; a trial stops at ruin, at `target`, or after `rounds`.
+`drawdown_q` are quantiles of the maximum drawdown from the running peak; `min_fraction` holds each trial's
+lowest wealth as a fraction of `w0` (for the drawdown law, E4).
+"""
+function simulate_ruin(m::ScenarioModel, a; rng, trials::Integer, rounds::Integer, w0 = 1.0, min_stake = 0.0, lot = 0.0,
+                       fixed_cost = 0.0, fixed_stake = nothing, target = Inf)
+    S, J = size(m.X)
+    (trials ≥ 1 && rounds ≥ 1) || throw(ArgumentError("trials and rounds must be ≥ 1"))
+    length(a) == J || throw(ArgumentError("length(a) = $(length(a)) != number of assets $J"))
+    (w0 > 0 && min_stake ≥ 0 && lot ≥ 0 && fixed_cost ≥ 0 && target > w0) ||
+        throw(ArgumentError("need w0 > 0, min_stake ≥ 0, lot ≥ 0, fixed_cost ≥ 0, target > w0"))
+    (fixed_stake === nothing || fixed_stake > 0) || throw(ArgumentError("fixed_stake must be > 0"))
+    bets = m.has_cash ? (2:J) : (1:J); cum = cumsum(m.π)
+    ruined = 0; maxdd = zeros(trials); final = zeros(trials); minf = zeros(trials)
+    for t in 1:trials
+        W = w0; peak = w0; dd = 0.0; ruin = false; lo = w0
+        for _ in 1:rounds
+            s = min(searchsortedfirst(cum, rand(rng) * cum[end]), S)
+            if fixed_stake === nothing
+                stakes = [a[j] * W for j in bets]
+                lot > 0 && (stakes = floor.(stakes ./ lot) .* lot)
+            else
+                stakes = zeros(length(bets)); stakes[1] = min(fixed_stake, W)
+            end
+            stakes[stakes .< min_stake] .= 0.0                     # bets below the minimum are skipped
+            placed = count(>(0.0), stakes)
+            W = W - sum(stakes) - fixed_cost * placed + sum(stakes[i] * m.X[s, bets[i]] for i in eachindex(bets))
+            peak = max(peak, W); dd = max(dd, 1 - W / peak); lo = min(lo, W)
+            if W ≤ 0 || (min_stake > 0 && W < min_stake); ruin = true; break; end
+            W ≥ target && break
+        end
+        ruined += ruin; maxdd[t] = dd; final[t] = max(W, 0.0); minf[t] = max(lo, 0.0) / w0
+    end
+    p = ruined / trials
+    return (p_ruin = p, se = sqrt(p * (1 - p) / trials), drawdown_q = quantile(maxdd, [0.5, 0.9, 0.99]),
+            final_q = quantile(final, [0.1, 0.5, 0.9]), min_fraction = minf)
+end
+

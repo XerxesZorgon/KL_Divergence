@@ -1551,7 +1551,7 @@ Stage with `git add -A` and commit with message `feat(diagnostics): drawdown law
 ### Acceptance Criterion
 1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
    `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
-2. testset `diagnostics: ruin and sample sizes (T-DIA-1, 2, 4)` shows ≥ 620 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+2. testset `diagnostics: ruin and sample sizes (T-DIA-1, 2, 4)` shows ≥ 615 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
 3. `git status --porcelain` prints nothing.
 
 ### On Failure

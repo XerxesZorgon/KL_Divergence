@@ -164,7 +164,7 @@ certify(result; tol = 1e-10)       -> result  # throws CertificationError
 | `drawdown_probability(x, c)` | x^{2/c − 1} for 0 < x < 1, 0 < c < 2; 1.0 for c ≥ 2 (continuous-limit law, Thorp 2006 — verify in E4) |
 | `effective_multiple(e_belief, e_true)` | c ≈ e_belief / e_true (small-edge continuous approximation) |
 | `ruin_probability_classical(p, a, N)` | ((q/p)^a − (q/p)^N)/(1 − (q/p)^N), q = 1 − p; 1 − a/N when p = 1/2; integer 0 ≤ a ≤ N; ±1-unit even-money steps only |
-| `simulate_ruin(m, a; rng, trials, rounds, w0, min_stake, lot, fixed_cost)` | Monte Carlo: stakes = a·W rounded down to multiples of `lot`; bets below `min_stake` skipped; `fixed_cost` charged per placed bet; ruin when W < min_stake. Returns (Pr ruin, SE, drawdown quantiles, final-wealth quantiles) |
+| `simulate_ruin(m, a; rng, trials, rounds, w0, min_stake, lot, fixed_cost, fixed_stake = nothing, target = Inf)` | Monte Carlo: stakes = a·W rounded down to multiples of `lot` (or `fixed_stake` on the first bet); bets below `min_stake` skipped; `fixed_cost` charged per placed bet; ruin when W ≤ 0 or W < min_stake; stops at ruin, `target`, or `rounds`. Returns (Pr ruin, SE, drawdown quantiles, final-wealth quantiles, `min_fraction`) (Task 031: needed to check the classical gambler's-ruin formula, T-DIA-6, and the drawdown law, E4) |
 | `n_detect(p, w; z = 1.96)` | z² p(1−p) w² / e², e = p w − 1 |
 | `n_relative(p, w; rel = 0.10)` | p(1−p) w² / (rel·e)²; rel = 0.10 gives 100 p(1−p) w²/e² |
 
