@@ -1,15 +1,16 @@
 module Kelly_KL
 
 using LinearAlgebra
+using Statistics
 using JuMP
-import Clarabel, SCS
+import Clarabel, SCS, Distributions
 
 const MOI = JuMP.MOI
 
 export ScenarioModel, single_event, simultaneous_bets, correlated_bets, payoffs_from_odds, growth
 export BetResult, CertificationError, SolverError, kkt_residual, certify
 export optimal_allocation
-export beta_predictive, dirichlet_predictive, predictive_from_draws, mixture, bma_weights
+export beta_predictive, dirichlet_predictive, predictive_from_draws, sampled_payoffs, growth_se, mixture, bma_weights
 export kl
 
 const PROB_TOL = 1e-12

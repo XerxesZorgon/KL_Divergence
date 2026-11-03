@@ -43,6 +43,52 @@ function predictive_from_draws(Pdraws::AbstractMatrix{<:Real}, w::AbstractVector
     return ScenarioModel(π, base.X; assets = base.assets, has_cash = cash, structure = :mixture)
 end
 
+function sampled_payoffs(p::AbstractVector{<:Real}, samplers::AbstractVector, M::Integer; rng, cash::Bool = true)
+    n = length(p)
+    length(samplers) == n || throw(ArgumentError("p and samplers must have equal length"))
+    1 ≤ n ≤ 16 || throw(ArgumentError("1 ≤ n ≤ 16 required, got n = $n"))
+    M ≥ 1 || throw(ArgumentError("M must be ≥ 1, got $M"))
+    B = 1 << n
+    S = M * B
+    S ≤ 1_048_576 || throw(ArgumentError("M * 2^n = $S exceeds 1_048_576"))
+    all(x -> isfinite(x) && 0.0 ≤ x ≤ 1.0, p) ||
+        throw(ArgumentError("win probabilities p must be finite and in [0, 1]"))
+    pf = collect(Float64, p)
+    W = Matrix{Float64}(undef, M, n)
+    for m in 1:M, k in 1:n
+        sk = samplers[k]
+        val = sk isa Distributions.Sampleable ? rand(rng, sk) : sk(rng)
+        (isfinite(val) && val > 0) ||
+            throw(ArgumentError("sampled payoff at m = $m, k = $k must be finite and > 0, got $val"))
+        W[m, k] = Float64(val)
+    end
+    wins(s, k) = ((s - 1) >> (k - 1)) & 1 == 1
+    π_block = [prod(wins(s, k) ? pf[k] : 1.0 - pf[k] for k in 1:n) / M for s in 1:B]
+    π = repeat(π_block, M)
+    X_bets = Matrix{Float64}(undef, S, n)
+    for m in 1:M, s in 1:B
+        r = (m - 1) * B + s
+        for k in 1:n
+            X_bets[r, k] = wins(s, k) ? W[m, k] : 0.0
+        end
+    end
+    X = cash ? hcat(ones(Float64, S), X_bets) : X_bets
+    bet_names = ["bet_$k" for k in 1:n]
+    assets = cash ? vcat(["cash"], bet_names) : bet_names
+    return ScenarioModel(π, X; assets = assets, has_cash = cash, structure = :sampled)
+end
+
+function growth_se(m::ScenarioModel, a::AbstractVector{<:Real})
+    m.structure === :sampled || throw(ArgumentError("growth_se requires m.structure == :sampled, got :$(m.structure)"))
+    n = size(m.X, 2) - m.has_cash
+    B = 1 << n
+    M = size(m.X, 1) ÷ B
+    M == 1 && return 0.0
+    V = m.X * a
+    g = [M * sum(m.π[r] * log(V[r]) for r in (i - 1) * B + 1 : i * B) for i in 1:M]
+    return std(g) / sqrt(M)
+end
+
 function mixture(models::AbstractVector{ScenarioModel}, weights::AbstractVector{<:Real})
     M = length(models)
     M ≥ 1 && length(weights) == M || throw(ArgumentError("models and weights must have equal length ≥ 1"))

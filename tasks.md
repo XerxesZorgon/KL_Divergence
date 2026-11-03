@@ -1164,7 +1164,7 @@ Gate: full `Pkg.test()` green incl. T-ORC-12, T-ORC-13, T-ERR-3.
 ---
 
 ## Task 023: Predictives, mixtures and BMA weights (T-ORC-12, T-ORC-13)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02, commit 4ec7f93)
 **Milestone:** M3
 **Depends on:** 022
 
@@ -1209,3 +1209,50 @@ Add `include("test_uncertainty.jl")` to `test/runtests.jl`. Stage with `git add 
 
 ### On Failure
 `TASK 023 FAILED — [which of 1–3] — [test ID, seed, case, expected vs got] — [error text]`
+
+**Result:** uncertainty testset 2 008 Pass; QUICK suite 35 394 Pass.
+
+---
+
+## Task 024: Predictive from posterior draws (dependent posteriors)
+**Status:** [ ] Pending
+**Milestone:** M3
+**Depends on:** 023
+
+### What to do
+In `code/src/uncertainty.jl` add and export `predictive_from_draws(Pdraws, w; cash = true)` (DESIGN §4.4): `Pdraws` is an
+M × n matrix whose row m is one joint posterior draw of the n win probabilities; `w` the gross payoffs. Validate
+`M ≥ 1`, `size(Pdraws, 2) == length(w)`, `1 ≤ n ≤ 16`, entries in [0, 1] (`ArgumentError`). With
+`base = simultaneous_bets(fill(0.5, n), w; cash)` (for `X` and `assets` only) and the same scenario bit layout
+(`wins(s, k) = ((s - 1) >> (k - 1)) & 1 == 1`), set
+`π_s = sum(prod(wins(s,k) ? Pdraws[m,k] : 1 - Pdraws[m,k] for k in 1:n) for m in 1:M) / M` and return
+`ScenarioModel(π, base.X; assets = base.assets, has_cash = cash, structure = :mixture)`.
+Docstring: the joint predictive; it differs from `simultaneous_bets(beta_predictive(…), w)` only through dependence
+between the bets' probabilities — prior width alone does not move the bet.
+Add to `code/test/test_uncertainty.jl` a new `@testset "uncertainty: predictive from draws"`:
+(a) **Independence limit (exact):** seed 1101, 100 cases, `n = rand(rng, 2:5)`, `m = 0.2 .+ 0.5 .* rand(rng, n)`,
+`h = 0.1 .* rand(rng, n)`, `w = (1.1 .+ 0.3 .* rand(rng, n)) ./ m`; draws = the full grid of per-bet values
+`[m_k - h_k, m_k + h_k]` (all 2^n combinations as rows, so the empirical joint is exactly independent);
+`@test maximum(abs.(predictive_from_draws(P, w).π .- simultaneous_bets(m, w).π)) ≤ 1e-14`.
+(b) **Dependence changes the bet:** `P_corr = [0.3 0.3; 0.7 0.7]` (perfectly correlated, both marginals 0.5) and
+`P_ind = [0.3 0.3; 0.3 0.7; 0.7 0.3; 0.7 0.7]` (independent, same marginals), `w = [2.2, 2.2]`;
+`mc = predictive_from_draws(P_corr, w)`, `mi = predictive_from_draws(P_ind, w)`;
+`@test mc.π ≈ [0.29, 0.21, 0.21, 0.29]` and `@test mi.π ≈ [0.25, 0.25, 0.25, 0.25]` (atol 1e-15);
+`rc = optimal_allocation(mc)`, `ri = optimal_allocation(mi)`, both `assert_certified`;
+`@test abs(rc.a[2] - 0.07155) ≤ 1e-4`, `@test abs(ri.a[2] - 0.08266) ≤ 1e-4` (prototype: correlation cuts each stake
+by ~13%, from 0.0827 to 0.0716).
+(c) **Validation:** `predictive_from_draws([0.5 1.2], [2.0, 2.0])` and `predictive_from_draws([0.5 0.5], [2.0])` throw `ArgumentError`.
+Stage with `git add -A` and commit with message `feat(uncertainty): predictive_from_draws for dependent posteriors`.
+
+### Files touched
+- `code/src/uncertainty.jl`, `code/src/Kelly_KL.jl` (export) — one concern: joint posterior predictive
+- `code/test/test_uncertainty.jl` — new testset
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `uncertainty: predictive from draws` shows ≥ 108 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 024 FAILED — [which of 1–3] — [part, seed, case, expected vs got] — [error text]`

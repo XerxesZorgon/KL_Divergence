@@ -1,4 +1,5 @@
-using StableRNGs, Random
+using StableRNGs, Random, Statistics
+import Distributions
 
 @testset "uncertainty: predictives, mixture, BMA" begin
     # T-ORC-12 (posterior collapse), seed 1001, 100 cases
@@ -94,5 +95,47 @@ end
     # (c) Validation
     @test_throws ArgumentError predictive_from_draws([0.5 1.2], [2.0, 2.0])
     @test_throws ArgumentError predictive_from_draws([0.5 0.5], [2.0])
+end
+
+@testset "uncertainty: sampled payoffs" begin
+    # (a) Layout / duplicate draws
+    ms = sampled_payoffs([0.3, 0.25], [_ -> 4.0, _ -> 6.0], 3; rng = StableRNG(1201))
+    mb = simultaneous_bets([0.3, 0.25], [4.0, 6.0])
+    @test ms.X == vcat(mb.X, mb.X, mb.X)
+    @test isapprox(ms.π, repeat(mb.π, 3) ./ 3; atol = 1e-15)
+    r = optimal_allocation(ms)
+    assert_certified(r, ms)
+    @test maximum(abs.(r.a .- optimal_allocation(mb).a)) ≤ 1e-10
+    @test growth_se(ms, r.a) ≤ 1e-15
+
+    # (b) Payoff spread cuts the stake (Jensen)
+    st = Ref(0)
+    alt = _ -> (st[] += 1; isodd(st[]) ? 1.5 : 2.9)
+    ms_b = sampled_payoffs([0.5], [alt], 2; rng = StableRNG(1202))
+    r_b = optimal_allocation(ms_b)
+    assert_certified(r_b, ms_b)
+    @test abs(r_b.a[2] - 0.07177777608818334) ≤ 1e-10
+    @test r_b.a[2] < (0.5 * 2.2 - 1) / (2.2 - 1) - 0.01
+
+    # (c) SE matches its definition
+    ms_c = sampled_payoffs(
+        [0.4, 0.35],
+        [Distributions.Uniform(1.8, 3.6), Distributions.Uniform(2.0, 4.0)],
+        500;
+        rng = StableRNG(1203),
+    )
+    r_c = optimal_allocation(ms_c)
+    assert_certified(r_c, ms_c)
+    B_c = 4
+    M_c = 500
+    V_c = ms_c.X * r_c.a
+    g_c = [M_c * sum(ms_c.π[row] * log(V_c[row]) for row in (i - 1) * B_c + 1 : i * B_c) for i in 1:M_c]
+    @test isapprox(growth_se(ms_c, r_c.a), std(g_c) / sqrt(500); rtol = 1e-12)
+    @test growth_se(ms_c, r_c.a) > 0
+
+    # (d) Validation
+    @test_throws ArgumentError sampled_payoffs([0.5], [_ -> -1.0], 2; rng = StableRNG(1204))
+    @test_throws ArgumentError sampled_payoffs([0.5], [_ -> 2.0], 0; rng = StableRNG(1204))
+    @test_throws ArgumentError growth_se(simultaneous_bets([0.3], [4.0]), [0.9, 0.1])
 end
 
