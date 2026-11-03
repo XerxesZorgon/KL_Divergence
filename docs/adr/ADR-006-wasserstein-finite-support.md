@@ -42,3 +42,7 @@ with each constraint written as (u_s − λ c_{st}, 1, (X̃ a)_t) ∈ K_exp.
 - If any candidate scenario pays only cash, a large enough ε forces a positive cash holding; this is
   intended behavior and is tested.
 - Choice of L1 is a modeling assumption; E7 reports one sensitivity run with L∞ to show its effect.
+
+## Amendment (Tasks 037–040, 2026-11-03) — accepted exception
+Inner worst case: exact breakpoint scan (matches LP to 4e-15). Robust bet: structure iteration certifies KKT ≤ 1e-10 when the worst case is unique (84% of 150 prototype cases; 25/30 in the QUICK suite); tied worst cases cycle, and are certified instead by a duality gap ≤ 1e-7 (prototype max 5.0e-8; suite max 1.17e-8). Decided by John on 2026-11-03 (two-tier certificate) rather than delaying v1 for an exact active-pair Newton, which failed on ties and λ* = 0 in prototyping.
+

@@ -62,7 +62,7 @@ on it.
    Manifest and exits 0 only if every output matches its stored reference (rules in ADR-009).
 2. **Oracle tests pass** (`julia --project=. -e "using Pkg; Pkg.test()"`):
    classic single-bet Kelly formula; Cover–Thomas identity; L ≤ D(p‖q); KL worst-case dual vs a
-   direct solve of the inner problem; KKT residual ≤ 1e-10 for every computed bet.
+   direct solve of the inner problem; KKT residual ≤ 1e-10 for every computed bet (exception: tied Wasserstein worst cases are certified by a duality gap ≤ 1e-7 — ADR-006 amendment, decided 2026-11-03).
 3. **Python parity:** `pytest python/tests` passes; every shared case agrees with Julia to ≤ 1e-10
    (absolute, on allocations and growth).
 4. **E1 refactor:** the package-based E1 produces byte-identical `e1_results.csv` and

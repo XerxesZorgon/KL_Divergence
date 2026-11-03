@@ -38,7 +38,7 @@ resolver makes on Julia 1.12; no other changes without a dedicated task.
 | MathOptInterface | 1.54.0 | dep |
 | Clarabel | 0.11.1 | dep |
 | SCS | 2.7.1 | dep |
-| ForwardDiff | 1.4.6 | dep |
+| ForwardDiff | 1.4.6 | removed (Task 040) |
 | Distributions | 0.25.132 | dep |
 | StableRNGs | 1.1.0 | dep (experiments + tests) |
 | Aqua | 0.8.18 | test |

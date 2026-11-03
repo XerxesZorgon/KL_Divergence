@@ -2148,7 +2148,7 @@ the exact worst case) at ≤ 1e-7, flagged in the result. Documented as an excep
 ---
 
 ## Task 038: Wasserstein-robust bet with a two-tier certificate — T-ORC-9 (i), T-ORC-10 (W), T-ORC-11
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-03)
 **Milestone:** M5
 **Depends on:** 037
 
@@ -2221,3 +2221,43 @@ Stage with `git add -A` and commit with message `feat(robust): wasserstein_robus
 
 ### On Failure
 `TASK 038 FAILED — [which of 1–4] — [part, seed, case, ε, certificate, kkt/gap, solver status] — [error text]`
+
+**Result:** 238 Pass (7.4 s); QUICK (a): 25 `:kkt`, 5 `:duality_gap`, largest gap 1.17e-8; QUICK suite 38 983 Pass (2 m 02 s).
+Mid-task fix reviewed: `wasserstein_support` now converts `unseen` to `Matrix{Float64}` (empty comprehensions are `Matrix{Any}`);
+all validation retained.
+
+**Re-sequenced remainder of M5:** 039 `kl_radius_chi2` (T-DIA-7); 040 DESIGN/SDD/ADR alignment + remove the unused ForwardDiff
+dependency; 041 CHANGELOG for M5 + full gate run.
+
+---
+
+## Task 039: KL radius from data (T-DIA-7)
+**Status:** [ ] Pending
+**Milestone:** M5
+**Depends on:** 038
+
+### What to do
+In `code/src/robust.jl` add and export `kl_radius_chi2(K::Integer, n::Integer; level = 0.95)` = `quantile(Distributions.Chisq(K - 1), level) / (2n)`
+(DESIGN §5.8): validate `K ≥ 2`, `n ≥ 1`, `0 < level < 1` (`ArgumentError`). Docstring: under the hypothesis that the model is right,
+2n·D(p̂‖π) is asymptotically χ²_{K−1} (G-test), so a KL ball of this radius around the empirical distribution of n observations over K
+outcomes covers the truth with probability ≈ `level`; asymptotic — E7 checks coverage by simulation; verify the Ben-Tal et al. (2013)
+direction convention before citing.
+Add to `code/test/test_robust.jl` a new `@testset "robust: KL radius (T-DIA-7)"`:
+`@test abs(kl_radius_chi2(2, 100) - 0.01920729410347062) ≤ 1e-14` (χ²₁ 95% quantile 3.8414588206941245 / 200);
+`@test abs(kl_radius_chi2(5, 500; level = 0.99) - 0.013276704135987622) ≤ 1e-14` (χ²₄ 99% quantile / 1000, from scipy);
+for `K ∈ (2, 3, 10)`, `n ∈ (10, 1000)`: `@test kl_radius_chi2(K, n) == quantile(Distributions.Chisq(K - 1), 0.95) / (2n)`;
+`kl_radius_chi2(1, 10)`, `kl_radius_chi2(3, 0)`, `kl_radius_chi2(3, 10; level = 1.0)` throw `ArgumentError`.
+Stage with `git add -A` and commit with message `feat(robust): kl_radius_chi2 (T-DIA-7)`.
+
+### Files touched
+- `code/src/robust.jl`, `code/src/Kelly_KL.jl` (export) — one concern: data-driven KL radius
+- `code/test/test_robust.jl` — new testset
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `robust: KL radius (T-DIA-7)` shows ≥ 11 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 039 FAILED — [which of 1–3] — [assertion, expected vs got] — [error text]`

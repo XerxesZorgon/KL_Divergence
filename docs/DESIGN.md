@@ -40,7 +40,7 @@ Payoffs are **gross** (ADR-003): a winning unit stake at payoff w returns w.
 | `src/model.jl` | `ScenarioModel` type, validation, constructors for single events, simultaneous bets, correlated tables | §4.1 |
 | `src/exact.jl` | Closed-form allocations: full investment (a = q), greedy with cash | §4.2 |
 | `src/conic.jl` | JuMP models for log-optimal, KL-robust and Wasserstein-robust problems; solver selection | internal: `solve_conic(problem; solver)` |
-| `src/polish.jl` | Newton polishing on the active set (log-optimal) and on the smooth saddle-point system (robust) | internal: `polish_log_optimal`, `polish_kl`, `polish_wasserstein` |
+| `src/polish.jl` | Newton polishing on the active set for log-optimal (k = 0) and CRRA-weighted (k = 1/λ) objectives; KL-robust λ search uses it | `polish_crra`, `polish_log_optimal` |
 | `src/certify.jl` | KKT residuals, `CertificationError`, `certify` | §4.3 |
 | `src/optimize.jl` | Dispatch exact vs conic; build `BetResult` | §4.2 |
 | `src/uncertainty.jl` | Beta / Dirichlet predictives, predictive from posterior draws, sampled payoffs, mixtures, BMA weights | §4.4 |
@@ -96,6 +96,7 @@ struct RobustResult
     kkt::Float64                # residual of a under Q (§5.6), ≤ 1e-10
     ball::Symbol                # :kl, :wasserstein
     ε::Float64
+    certificate::Symbol  # :kkt (saddle KKT ≤ tol) or :duality_gap (Wasserstein ties: gap ≤ 1e-7)
 end
 
 struct CertificationError <: Exception
@@ -173,6 +174,7 @@ certify(result; tol = 1e-10)       -> result  # throws CertificationError
 kl_robust_allocation(m, ε; solver = :clarabel, tol = 1e-10)               -> RobustResult
 kl_worst_case(m, a, ε)              -> (value, λ, Q)    # 1-D dual (§5.6), no conic solver
 kl_inner_direct(m, a, ε)            -> (value, Q)       # direct conic solve over Q (test oracle)
+kl_cash_radius(m) -> (radius, Q)    # KL distance to the nearest no-edge world; the KL-robust bet is all cash iff ε ≥ radius; Inf when some bet mix beats cash in every scenario
 kl_radius_chi2(K, n; level = 0.95)  -> ε                # §5.8
 wasserstein_robust_allocation(m, ε; unseen = zeros(0, J), cost = :l1, tol = 1e-10) -> RobustResult
 wasserstein_worst_case(m, a, ε; unseen, cost)        -> (value, λ, Q)   # exact 1-D dual (§5.9)
@@ -237,12 +239,7 @@ $$\phi(\lambda)=-\lambda\log\sum_s\pi_s e^{-f_s/\lambda}-\lambda\varepsilon,\qqu
 for stability, w ∝ π e^{−g/λ}) by safeguarded Newton/bisection to |φ′| ≤ 1e-13. Worst case
 Q*_s ∝ π_s e^{−f_s/λ*}. Let s_w = argmin_s f_s; since D(δ_{s_w}‖π) = log(1/π_{s_w}), if ε ≥ log(1/π_{s_w}) the
 ball contains the point mass on s_w, λ* → 0 and value = f_{s_w} (handled explicitly, no root search).
-Joint program: ADR-005. **Polish:** joint Newton on the smooth system in (a_A, ν, λ):
-r^{Q*(a,λ)}_j(a) − ν = 0 (j ∈ A), Σ_A a_j = 1, φ′(λ; a) = 0, with the Jacobian from ForwardDiff.jl
-(prototype 2026-11-01 in Python with a central-difference Jacobian: 2 Newton steps took the conic
-solution to residual 2e-16; a naive alternating best-response scheme did **not** converge — it
-drifted to a different allocation with residual 0.30 — so it is not used). **Certify:** saddle-point
-property — a* must satisfy ρ(a*) ≤ 1e-10 with π replaced by Q*, and |D(Q*‖π) − ε| ≤ 1e-10 when λ* > 0.
+**Algorithm (Task 036, replaces the planned joint Newton):** (i) ε = 0 → nominal bet; (ii) with cash, if ε ≥ `kl_cash_radius(m)` the robust bet is all cash, certified by the I-projection Q (max_j E_Q[X_j] − 1 ≤ tol); (iii) otherwise the joint conic program of ADR-005 seeds λ, and a 1-D search on log λ solves D(Q(λ)‖π) = ε, where for each λ the bet is the CRRA bet with γ = 1 + 1/λ (`polish_crra`, k = 1/λ; dH/dλ = D − ε by the envelope theorem). **Certify:** KKT residual of a* under Q* ∝ π·V^{−1/λ*} ≤ 1e-10 and |D(Q*‖π) − ε| ≤ 1e-10. **v1 limit:** if λ* → 0 (no bracket) — e.g. a bet mix that beats cash in every scenario with a large ε — `CertificationError` is thrown.
 Oracles: CRRA bet with γ = 1 + 1/λ* equals a*; small ε: value ≈ E_π f − √(2ε Var_π f).
 
 ### 5.7 Uncertain probabilities collapse to the predictive
@@ -264,9 +261,7 @@ cites it). E7 checks coverage by simulation.
 Candidate support X̃ = [X; unseen] (T rows); costs c_st. Inner worst case for fixed a:
 value = max_{λ≥0} −λε + Σ_s π_s min_t (f_t + λ c_st), f_t = log V_t(a) — piecewise linear and concave in λ;
 solved exactly by scanning its breakpoints. Q*_t = Σ_s γ_st, with each s sending π_s to its argmin t
-(one s may split at the breakpoint so the budget binds). Joint program: ADR-006. **Polish:** Newton on the
-active-piece KKT system (active pairs (s, t), γ on active pairs, a_A, ν, λ). **Certify:** ρ(a*) ≤ 1e-10 under
-Q* and transport budget |Σ γ c − ε| ≤ 1e-10 when λ* > 0.
+(one s may split at the breakpoint so the budget binds). Joint program: ADR-006. **Algorithm (Task 038):** joint conic program (ADR-006) → structure iteration (polish the bet under the exact worst case Q with a 1e-300 weight floor on every support row, recompute Q, repeat ≤ 10 times). **Certify (two-tier, ADR-006 amendment):** tier 1 — Q unchanged and KKT of a* under Q* ≤ 1e-10; tier 2 (tied worst cases) — duality gap U − L ≤ 1e-7, with U = optimal growth under the conic dual transport plan's marginal (a distribution in the ball) and L = the exact worst case of the returned bet.
 
 ### 5.10 Sample sizes (single binary bet, gross payoff w)
 Net return per unit: R = w − 1 w.p. p, −1 w.p. 1 − p; mean e = pw − 1; Var R = p(1−p)w². Detecting e ≠ 0
@@ -300,7 +295,6 @@ the Manifest on Julia 1.12.x and records any version the resolver had to change.
 | MathOptInterface | 1.54.0 | cone types (`ExponentialCone`), solver interface |
 | Clarabel | 0.11.1 | primary interior-point conic solver (ADR-004) |
 | SCS | 2.7.1 | fallback conic solver |
-| ForwardDiff | 1.4.6 | Jacobians for robust Newton polish (§5.6, §5.9) |
 | Distributions | 0.25.132 | Beta / Dirichlet / payoff samplers, χ² quantiles |
 | StableRNGs | 1.1.0 | version-stable RNG for E2–E7 (ADR-009) |
 | Aqua | 0.8.18 | package hygiene tests (test-only) |

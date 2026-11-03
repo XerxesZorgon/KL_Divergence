@@ -24,10 +24,10 @@ Random tests use fixed seeds (StableRNG for new tests; E1 tests keep Xoshiro, AD
 | T-ORC-3 | L ≤ D(p‖q) beyond single events | 2 000 random simultaneous (n ∈ 2:6) and correlated (S ≤ 64) models with cash, belief = tilted truth | 0 cases with L > D(p‖q) + 1e-10; all bets certified |
 | T-ORC-4 | KL worst-case dual vs direct solve | 200 random (π, X, a, ε), ε ∈ [1e-4, 1] | (i) \|kl_worst_case − kl_inner_direct\| ≤ 1e-7 (direct solve is conic); (ii) dual's Q* satisfies \|D(Q*‖π) − ε\| ≤ 1e-10 and \|E_{Q*}f − value\| ≤ 1e-12 |
 | T-ORC-5 | KKT residual on every bet | 500 random conic problems (S ≤ 256, J ≤ 12) + hook over whole suite | ρ ≤ 1e-10 (DESIGN §5.2) for all |
-| T-ORC-6 | KL robust ⇔ CRRA | 100 random models, ε ∈ [1e-3, 0.5] | CRRA bet with γ = 1 + 1/λ* matches robust a* within 1e-8 (both certified) |
+| T-ORC-6 | KL robust ⇔ CRRA | 100 random models, ε ∈ [1e-3, 0.5] | CRRA bet with γ = 1 + 1/λ* matches robust a* within 1e-8 (both certified) (also: CRRA bet from a uniform start equals the robust bet ≤ 1e-8; robust worst case ≥ that of random bets) |
 | T-ORC-7 | Small-ε expansion | 20 models, ε ∈ {1e-4, 1e-5, 1e-6} | \|value − (E f − √(2ε Var f))\| / ε stays bounded (ratio between successive ε ≤ 2) |
 | T-ORC-8 | Greedy = conic on single events with cash | 1 000 random non-degenerate single events | allocations agree within 1e-10 |
-| T-ORC-9 | Wasserstein value consistency | 100 random models with 0–3 unseen rows | (i) `RobustResult.worst_case_growth` = `wasserstein_worst_case(a*)` within 1e-10; (ii) vs transport LP solved by Clarabel within 1e-7 |
+| T-ORC-9 | Wasserstein value consistency | 100 random models with 0–3 unseen rows | (i) `RobustResult.worst_case_growth` = `wasserstein_worst_case(a*)` within 1e-10; (ii) vs transport LP solved by Clarabel within 1e-7 (certificate tier reported; tier 2 allowed at gap ≤ 1e-7) |
 | T-ORC-10 | Robust reduces to nominal at ε = 0 | 50 models | KL and Wasserstein bets equal `optimal_allocation` within 1e-9 |
 | T-ORC-11 | Unseen catastrophe forces cash | model + one unseen cash-only row, ε large | Wasserstein bet has cash > 0; KL bet unaffected by the unseen row (KL ball cannot reach it) |
 | T-ORC-12 | Posterior collapse (DESIGN §5.7) | Beta(sm, s(1−m)) for s ∈ {2, 10, 1000}, same mean m | identical bets (abs ≤ 1e-12) for independent bets |

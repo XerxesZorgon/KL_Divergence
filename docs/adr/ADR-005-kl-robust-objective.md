@@ -41,3 +41,7 @@ a ∈ Δ^J, λ ≥ 0, where K_exp = cl{(x, y, z) : y e^{x/y} ≤ z, y > 0}.
 - Certification uses the saddle-point property: the robust bet a* must be log-optimal under the
   worst-case distribution Q* ∝ π·V(a*)^{−1/λ*}, with plain KKT residual ≤ 1e-10 under Q*
   (DESIGN.md §5.6).
+
+## Amendment (Task 036–040, 2026-11-03)
+Implemented as: cash test via the no-edge I-projection (`kl_cash_radius`: robust bet is all cash iff ε ≥ D_min = min{D(Q‖π): E_Q[X_j] ≤ 1 ∀ bets}), else conic seed + 1-D λ search with the CRRA polish. Prototype: 120/120 cases classified like the joint conic; 83/83 interior cases certified to 1.6e-14. v1 limit: λ* → 0 without cash-optimality throws `CertificationError`.
+

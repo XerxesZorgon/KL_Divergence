@@ -44,3 +44,7 @@ the KKT residual and throw if it exceeds 1e-10. SCS.jl is a fallback selectable 
   non-degenerate cases.
 - If polishing fails to reach 1e-10, the call throws `CertificationError` rather than returning a
   weaker answer.
+
+## Amendment (Task 040, 2026-11-03)
+Robust bets do not use a ForwardDiff joint Newton: the KL ball uses the CRRA-weighted polish with analytic gradient and Hessian inside a 1-D λ search, and the Wasserstein ball uses structure iteration plus a two-tier certificate (ADR-005, ADR-006 amendments). ForwardDiff was removed.
+
