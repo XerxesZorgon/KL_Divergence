@@ -1873,7 +1873,7 @@ Stage with `git add -A` and commit with message `feat(polish): CRRA-weighted pol
 ---
 
 ## Task 035: The KL cash radius (no-edge I-projection)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-03, after Fix 035a, commit 6ceaa6a)
 **Milestone:** M5
 **Depends on:** 034
 
@@ -1955,3 +1955,173 @@ cases had radius = Inf.
 In `kl_cash_radius`, immediately after the outer loop: `all(==(0.0), μ) && return (0.0, p)` (no bet has an edge under π: the
 model itself is the nearest no-edge world, radius exactly 0); and change the final line to `return (max(kl(Q, p), 0.0), Q)`.
 Rerun the QUICK reference suite and commit as in Task 035. Acceptance as Task 035.
+
+**Result (Fix 035a):** KL cash radius 342 Pass; 6 of 50 QUICK (c) cases radius = Inf (all confirmed INFEASIBLE by the direct
+solve); QUICK suite 38 356 Pass.
+
+---
+
+## Task 036: KL-robust bet (`RobustResult`, `kl_robust_allocation`) — T-ORC-6, T-ORC-10 (KL)
+**Status:** [x] Done (2026-11-03, commit 2016af1)
+**Milestone:** M5
+**Depends on:** 035
+
+### What to do
+In `code/src/robust.jl` add and export `RobustResult` and `kl_robust_allocation`.
+- `struct RobustResult` with fields `a::Vector{Float64}`, `worst_case_growth::Float64`, `nominal_growth::Float64`, `λ::Float64`,
+  `Q::Vector{Float64}`, `support::Matrix{Float64}`, `kkt::Float64`, `ball::Symbol`, `ε::Float64` (DESIGN §3.2).
+- Internal `kl_robust_conic(m, ε; solver = :clarabel)` → `(a, λ)`: the joint program of ADR-005 over `pos`
+  (variables `a ≥ 0`, `λ ≥ 0`, `t`, `w[s]`, `z[s]`; `sum(a) == 1`; `sum(p[s] * z[s]) ≤ λ`; `[t - w[s], λ, z[s]] ∈ MOI.ExponentialCone()`;
+  `[w[s], 1.0, V_s(a)] ∈ MOI.ExponentialCone()`; maximize `t - λ * ε`); default solver settings; `SolverError` on a bad status;
+  return `(max.(a, 0) ./ sum(max.(a, 0)), value(λ))`.
+- `kl_robust_allocation(m::ScenarioModel, ε; solver = :clarabel, tol = CERT_TOL)` → `RobustResult` (`ε` is required, ADR-011;
+  validate `ε ≥ 0`). With `pos`, `p = m.π[pos]`, `Xp = m.X[pos, :]`:
+  1. `ε == 0`: `r = optimal_allocation(m; solver, tol)`; return `RobustResult(r.a, r.growth, r.growth, Inf, p, Xp, r.kkt, :kl, 0.0)`.
+  2. If `m.has_cash`: `(D_min, Qc) = kl_cash_radius(m)`; if `ε ≥ D_min`: `a = [1.0; zeros(J - 1)]`, `ρ = kkt_residual(Xp, a, Qc)`;
+     `ρ ≤ tol` or throw `CertificationError(ρ, tol, :kl, "cash certificate")`; return `RobustResult(a, 0.0, 0.0, 0.0, Qc, Xp, ρ, :kl, ε)`.
+  3. Otherwise `(a, λ0) = kl_robust_conic(m, ε; solver)`, then the λ search (prototyped 2026-11-03 on 83 interior cases:
+     KKT under Q* ≤ 1.6e-14, |D − ε| ≤ 8e-15):
+     ```julia
+     function Dλ(λ)                                  # re-optimize the CRRA bet at λ, warm-started, and return D(Q‖π)
+         a .= polish_crra(m.X, m.π, a, 1 / λ; tol)[1]
+         Q, _ = crra_weights(Xp, p, a, 1 / λ)
+         return kl(Q, p)
+     end
+     lo, hi = λ0 / 2, 2λ0
+     n = 0; while Dλ(lo) ≤ ε; lo /= 2; (n += 1) > 60 && throw(CertificationError(Inf, tol, :kl, "no lower bracket for λ*")); end
+     n = 0; while Dλ(hi) > ε; hi *= 2; (n += 1) > 60 && throw(CertificationError(Inf, tol, :kl, "no upper bracket for λ*")); end
+     l, h = log(lo), log(hi)
+     for _ in 1:200
+         mid = (l + h) / 2
+         Dλ(exp(mid)) > ε ? (l = mid) : (h = mid)
+         h - l < 1e-13 && break
+     end
+     λ = exp((l + h) / 2)
+     a, ρ = polish_crra(m.X, m.π, a, 1 / λ; tol)
+     Q, V = crra_weights(Xp, p, a, 1 / λ)
+     ```
+  4. Certify the saddle point: `ρ ≤ tol` (a* is log-optimal under Q*) and `abs(kl(Q, p) - ε) ≤ tol` (Q* is on the ball's
+     boundary), else `CertificationError`. Return `RobustResult(a, sum(Q .* log.(V)), growth(m, a), λ, Q, Xp, ρ, :kl, ε)`.
+  Docstring: the bet maximizing worst-case growth over the KL ball; equals the CRRA bet with γ = 1 + 1/λ*; all cash exactly when
+  ε ≥ `kl_cash_radius(m)`; a model without cash whose λ* → 0 throws `CertificationError` (v1 limit, documented).
+Add to `code/test/test_robust.jl` a new `@testset "robust: KL-robust bet (T-ORC-6, T-ORC-10)"` (StableRNG; `using Kelly_KL: polish_crra, kl_robust_conic`):
+(a) **Analytic single bet:** `m = correlated_bets([0.6, 0.4], [2.0; 0.0;;])`; for `(ε, f) in ((0.001, 0.1560563420293526), (0.005, 0.10143706865613433), (0.01, 0.06033774487079824), (0.015, 0.02872571386602285))`
+(f = 2q* − 1 with D(Bern(q*)‖Bern(0.6)) = ε, q* < 0.6, solved by brentq): `r = kl_robust_allocation(m, ε)`; `@test abs(r.a[2] - f) ≤ 1e-10`;
+`@test r.kkt ≤ 1e-10`; and for `ε = 0.03 > 0.0204` (the cash radius): `r.a == [1.0, 0.0]` and `r.worst_case_growth == 0.0`.
+(b) **T-ORC-6 and max-min property**, seed 1901, `QUICK ? 20 : 100` correlated models (Task 021 generator),
+`ε = exp(log(1e-3) + rand(rng) * (log(0.5) - log(1e-3)))`: `r = kl_robust_allocation(m, ε)`; `@test r.kkt ≤ 1e-10`;
+`@test abs(r.worst_case_growth - kl_worst_case(m, r.a, ε)[1]) ≤ 1e-10`; if `0 < r.λ < Inf`: `@test abs(kl(r.Q, m.π) - ε) ≤ 1e-10`
+and `ac, ρc = polish_crra(m.X, m.π, fill(1 / size(m.X, 2), size(m.X, 2)), 1 / r.λ)` (CRRA bet from a uniform start, γ = 1 + 1/λ*)
+satisfies `@test maximum(abs.(ac .- r.a)) ≤ 1e-8`; and for 5 random allocations `b` (normalized `randexp(rng, J)`):
+`@test kl_worst_case(m, b, ε)[1] ≤ r.worst_case_growth + 1e-10` (nothing beats the robust bet's worst case). Count the
+all-cash results.
+(c) **T-ORC-10 (KL):** seed 1902, 20 correlated models: `kl_robust_allocation(m, 0.0).a` equals `optimal_allocation(m).a` within 1e-9.
+(d) **Validation:** `ε = -0.1` throws `ArgumentError`.
+Stage with `git add -A` and commit with message `feat(robust): kl_robust_allocation with saddle-point certification (T-ORC-6, T-ORC-10)`.
+
+### Files touched
+- `code/src/robust.jl`, `code/src/Kelly_KL.jl` (exports) — one concern: KL-robust bet
+- `code/test/test_robust.jl` — new testset
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `robust: KL-robust bet (T-ORC-6, T-ORC-10)` shows ≥ 180 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. report the testset wall time and how many (b) models returned all cash;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 036 FAILED — [which of 1–4] — [part, seed, case, ε, kkt / |D − ε| / stake error] — [error text]`
+
+**Result:** 201 Pass (1.6 s); 5 of 20 QUICK (b) models all cash; QUICK suite 38 557 Pass. Analytic single-bet robust stakes
+(2q* − 1) reproduced to 1e-10.
+
+---
+
+## Task 037: Wasserstein worst case for a fixed bet — exact breakpoint scan + LP oracle (T-ORC-9 ii)
+**Status:** [ ] Pending
+**Milestone:** M5
+**Depends on:** 036
+
+### What to do
+In `code/src/robust.jl` add and export `wasserstein_worst_case`, and add the internal oracle `wasserstein_inner_lp`.
+- Internal `wasserstein_support(m, unseen, cost)` → `(Xs, Xt, C, p)`: `pos = findall(>(0.0), m.π)`, `Xs = m.X[pos, :]`, `p = m.π[pos]`,
+  `Xt = vcat(Xs, unseen)` (T rows; `unseen` must have `size(m.X, 2)` columns, finite, `≥ 0`, else `ArgumentError`);
+  `C[s, t] = sum(abs.(Xs[s, :] .- Xt[t, :]))` for `cost = :l1`, `maximum(abs.(…))` for `:linf`, or a user `S × T` matrix
+  (finite, `≥ 0`, `C[s, s] == 0`), else `ArgumentError`.
+- `wasserstein_worst_case(m, a, ε; unseen = zeros(0, size(m.X, 2)), cost = :l1)` → `(value, λ, Q)`, Q over the T support rows.
+  Validate `ε ≥ 0` and `Xt * a .> 0` (`ArgumentError`). Exact algorithm (prototyped 2026-11-03 on 300 random cases with 0–3
+  unseen rows: |value − HiGHS LP| ≤ 4.4e-15): the dual value is max over λ ≥ 0 of −λε + Σ_s p_s min_t (f_t + λ C[s,t]),
+  f = log.(Xt * a); for each s, walk the lower envelope of the lines f_t + λ·C[s,t]; then scan the breakpoints until the
+  transport budget binds:
+  ```julia
+  f = log.(Xt * a); S, T = size(C)
+  cur = zeros(Int, S); events = Tuple{Float64,Int,Int,Int}[]       # (λ, s, old t, new t)
+  for s in 1:S
+      fmin = minimum(f); cand = findall(t -> f[t] == fmin, 1:T)
+      ℓ = cand[argmin(C[s, cand])]; cur[s] = ℓ; λc = 0.0
+      while C[s, ℓ] > 0
+          best, bt = Inf, 0
+          for t in 1:T
+              C[s, t] < C[s, ℓ] || continue
+              λt = max((f[t] - f[ℓ]) / (C[s, ℓ] - C[s, t]), λc)
+              if λt < best || (λt == best && C[s, t] < C[s, bt]); best, bt = λt, t; end
+          end
+          push!(events, (best, s, ℓ, bt)); ℓ = bt; λc = best
+      end
+  end
+  budget = sum(p[s] * C[s, cur[s]] for s in 1:S)
+  if budget ≤ ε                              # λ* = 0: the budget reaches every scenario's worst outcome
+      Q = zeros(T); for s in 1:S; Q[cur[s]] += p[s]; end
+      return (sum(Q .* f), 0.0, Q)
+  end
+  sort!(events, by = e -> e[1])
+  asg = copy(cur); i = 1
+  while i ≤ length(events)
+      λb = events[i][1]; j = i
+      while j ≤ length(events) && events[j][1] == λb; j += 1; end
+      newbudget = budget + sum(p[events[k][2]] * (C[events[k][2], events[k][4]] - C[events[k][2], events[k][3]]) for k in i:j-1)
+      if newbudget ≤ ε
+          θ = (ε - newbudget) / (budget - newbudget)   # share of the switching mass left on the old outcome: budget binds exactly
+          Q = zeros(T); sw = Set(events[k][2] for k in i:j-1)
+          for s in 1:S; s in sw || (Q[asg[s]] += p[s]); end
+          for k in i:j-1; s, o, n = events[k][2], events[k][3], events[k][4]; Q[o] += θ * p[s]; Q[n] += (1 - θ) * p[s]; end
+          return (sum(Q .* f), λb, Q)
+      end
+      for k in i:j-1; asg[events[k][2]] = events[k][4]; end
+      budget = newbudget; i = j
+  end
+  ```
+  (After the last event every scenario stays at its own row, cost 0 ≤ ε, so the loop always returns.) Docstring: worst-case
+  expected log growth when an adversary may move probability mass along the support at total transport cost ≤ ε; unlike the KL
+  ball it can move mass onto `unseen` scenarios the model gives zero probability.
+- Internal `wasserstein_inner_lp(m, a, ε; unseen, cost)` → value (test oracle): variables `γ[s, t] ≥ 0`; `sum(γ[s, :]) == p[s]`;
+  `sum(γ .* C) ≤ ε`; minimize `sum(γ[s, t] * f[t])`; Clarabel with the tight attributes of `kl_inner_direct`; `SolverError` on a bad status.
+Add to `code/test/test_robust.jl` a new `@testset "robust: Wasserstein worst case (T-ORC-9 ii)"` (StableRNG; `using Kelly_KL: wasserstein_inner_lp`):
+(a) seed 2001, `QUICK ? 60 : 300` cases: `S = rand(rng, 3:29)`, `n = rand(rng, 1:6)`, `π`, `W` as the Task 021 generator,
+`m = correlated_bets(π, W)`; `T0 = rand(rng, 0:3)`; `unseen = hcat(ones(T0), [rand(rng) < 0.3 ? 1 + 4 * rand(rng) : 0.0 for t in 1:T0, k in 1:n])`;
+`a` normalized `randexp(rng, n + 1)`; `ε = exp(log(1e-3) + rand(rng) * (log(3.0) - log(1e-3)))`;
+`(v, λ, Q) = wasserstein_worst_case(m, a, ε; unseen)`; `@test abs(v - wasserstein_inner_lp(m, a, ε; unseen)) ≤ 1e-7`;
+`@test abs(sum(Q) - 1) ≤ 1e-12`; `@test abs(sum(Q .* log.(vcat(m.X, unseen) * a)) - v) ≤ 1e-12`.
+(b) **Unseen catastrophe:** `m = correlated_bets([0.5, 0.5], [3.0; 0.0;;])`, `a = [0.8, 0.2]`, `unseen = [1.0 0.0]` (identical to
+the losing row, so cost 0 from row 2): value equals the KL-free nominal growth (moving to an identical row changes nothing);
+with `unseen = [0.5 0.0]` (cash halves — not a valid gross return for cash, so instead use a catastrophe for the bet:
+`m = correlated_bets([0.5, 0.5], [3.0 0.0; 0.0 2.0])`, `a = [0.2, 0.4, 0.4]`, `unseen = [1.0 0.0 0.0]` — both bets lose):
+`wasserstein_worst_case(m, a, 10.0; unseen)[1] ≈ log(0.2)` (atol 1e-12; a large budget moves all mass to the catastrophe) and
+`wasserstein_worst_case(m, a, 0.0; unseen)[1] ≈ 0.5 * log(1.4) + 0.5 * log(1.0)` (atol 1e-12; ε = 0 is nominal).
+(c) **L∞ cost and a user matrix** run without error and match `wasserstein_inner_lp` with the same `cost` within 1e-7 on one case each.
+(d) **Validation:** `unseen` with the wrong number of columns, a negative entry, `ε = -1`, and a bet with `Xt * a` not positive each throw `ArgumentError`.
+Stage with `git add -A` and commit with message `feat(robust): wasserstein_worst_case (exact breakpoint scan) + LP oracle (T-ORC-9 ii)`.
+
+### Files touched
+- `code/src/robust.jl`, `code/src/Kelly_KL.jl` (export) — one concern: Wasserstein inner worst case
+- `code/test/test_robust.jl` — new testset
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `robust: Wasserstein worst case (T-ORC-9 ii)` shows ≥ 185 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 037 FAILED — [which of 1–3] — [part, seed, case, breakpoint value vs LP] — [error text]`

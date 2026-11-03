@@ -1,5 +1,5 @@
 using StableRNGs, Random
-using Kelly_KL: kl_cash_radius_direct, greedy_allocation, polish_crra, kl_robust_conic
+using Kelly_KL: kl_cash_radius_direct, greedy_allocation, polish_crra, kl_robust_conic, wasserstein_inner_lp
 
 @testset "robust: KL worst case (T-ORC-4, T-ORC-7)" begin
     # T-ORC-4, seed 1601
@@ -166,4 +166,46 @@ end
     # (d) Validation
     @test_throws ArgumentError kl_robust_allocation(m_a, -0.1)
 end
+
+@testset "robust: Wasserstein worst case (T-ORC-9 ii)" begin
+    # (a) Breakpoint scan vs LP, seed 2001
+    rng = StableRNG(2001)
+    N_a = QUICK ? 60 : 300
+    for _ in 1:N_a
+        S = rand(rng, 3:29)
+        n = rand(rng, 1:6)
+        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
+        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
+        m = correlated_bets(π, W)
+        T0 = rand(rng, 0:3)
+        unseen = hcat(ones(T0), [rand(rng) < 0.3 ? 1 + 4 * rand(rng) : 0.0 for t in 1:T0, k in 1:n])
+        xa = randexp(rng, n + 1); a = xa ./ sum(xa)
+        ε = exp(log(1e-3) + rand(rng) * (log(3.0) - log(1e-3)))
+        (v, λ, Q) = wasserstein_worst_case(m, a, ε; unseen)
+        @test abs(v - wasserstein_inner_lp(m, a, ε; unseen)) ≤ 1e-7
+        @test abs(sum(Q) - 1) ≤ 1e-12
+        @test abs(sum(Q .* log.(vcat(m.X, unseen) * a)) - v) ≤ 1e-12
+    end
+
+    # (b) Unseen catastrophe
+    m_b = correlated_bets([0.5, 0.5], [3.0 0.0; 0.0 2.0])
+    a_b = [0.2, 0.4, 0.4]
+    unseen_b = [1.0 0.0 0.0]
+    @test abs(wasserstein_worst_case(m_b, a_b, 0.0; unseen = unseen_b)[1] - (0.5 * log(1.4) + 0.5 * log(1.0))) ≤ 1e-12
+    @test abs(wasserstein_worst_case(m_b, a_b, 10.0; unseen = unseen_b)[1] - log(0.2)) ≤ 1e-12
+
+    # (c) cost = :linf and user S × T matrix
+    @test abs(wasserstein_worst_case(m_b, a_b, 0.5; unseen = unseen_b, cost = :linf)[1] -
+              wasserstein_inner_lp(m_b, a_b, 0.5; unseen = unseen_b, cost = :linf)) ≤ 1e-7
+    C_user = [0.0 2.0 1.5; 2.0 0.0 1.0]
+    @test abs(wasserstein_worst_case(m_b, a_b, 0.5; unseen = unseen_b, cost = C_user)[1] -
+              wasserstein_inner_lp(m_b, a_b, 0.5; unseen = unseen_b, cost = C_user)) ≤ 1e-7
+
+    # (d) Validation
+    @test_throws ArgumentError wasserstein_worst_case(m_b, a_b, 0.5; unseen = zeros(1, 2))
+    @test_throws ArgumentError wasserstein_worst_case(m_b, a_b, 0.5; unseen = [1.0 -0.1 0.0])
+    @test_throws ArgumentError wasserstein_worst_case(m_b, a_b, -1.0; unseen = unseen_b)
+    @test_throws ArgumentError wasserstein_worst_case(m_b, [0.0, 0.5, 0.5], 0.5; unseen = unseen_b)
+end
+
 

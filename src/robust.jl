@@ -209,3 +209,106 @@ function kl_robust_allocation(m::ScenarioModel, ε::Real; solver::Symbol = :clar
     return RobustResult(a, sum(Q .* log.(V)), growth(m, a), λ, Q, Xp, ρ, :kl, εf)
 end
 
+function wasserstein_support(m::ScenarioModel, unseen, cost)
+    unseen isa AbstractMatrix{<:Real} || throw(ArgumentError("unseen must be a real matrix"))
+    size(unseen, 2) == size(m.X, 2) || throw(ArgumentError("size(unseen, 2) = $(size(unseen, 2)) != size(m.X, 2) = $(size(m.X, 2))"))
+    all(x -> isfinite(x) && x ≥ 0.0, unseen) || throw(ArgumentError("unseen entries must be finite and ≥ 0"))
+    pos = findall(>(0.0), m.π)
+    Xs = m.X[pos, :]
+    p = m.π[pos]
+    Xt = vcat(Xs, Matrix{Float64}(unseen))
+    S, T = size(Xs, 1), size(Xt, 1)
+    if cost === :l1
+        C = [sum(abs.(Xs[s, :] .- Xt[t, :])) for s in 1:S, t in 1:T]
+    elseif cost === :linf
+        C = [maximum(abs.(Xs[s, :] .- Xt[t, :])) for s in 1:S, t in 1:T]
+    elseif cost isa AbstractMatrix{<:Real}
+        size(cost) == (S, T) || throw(ArgumentError("cost matrix must have size ($S, $T), got $(size(cost))"))
+        all(x -> isfinite(x) && x ≥ 0.0, cost) || throw(ArgumentError("cost matrix entries must be finite and ≥ 0"))
+        all(s -> cost[s, s] == 0.0, 1:S) || throw(ArgumentError("cost matrix must satisfy C[s, s] == 0"))
+        C = Matrix{Float64}(cost)
+    else
+        throw(ArgumentError("cost must be :l1, :linf, or an S×T matrix"))
+    end
+    return (Xs, Xt, C, p)
+end
+
+"""
+    wasserstein_worst_case(m::ScenarioModel, a, ε; unseen = zeros(0, size(m.X, 2)), cost = :l1) -> (value, λ, Q)
+
+Worst-case expected log growth when an adversary may move probability mass along the support
+at total transport cost `≤ ε`; unlike the KL ball it can move mass onto `unseen` scenarios the
+model gives zero probability.
+"""
+function wasserstein_worst_case(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real;
+                                unseen = zeros(0, size(m.X, 2)), cost = :l1)
+    (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("wasserstein_worst_case requires finite ε ≥ 0, got $ε"))
+    length(a) == size(m.X, 2) || throw(ArgumentError("length(a) = $(length(a)) != size(m.X, 2) = $(size(m.X, 2))"))
+    Xs, Xt, C, p = wasserstein_support(m, unseen, cost)
+    V = Xt * collect(Float64, a)
+    all(x -> isfinite(x) && x > 0.0, V) || throw(ArgumentError("all support scenarios must have Xt * a > 0"))
+    f = log.(Xt * a); S, T = size(C)
+    cur = zeros(Int, S); events = Tuple{Float64,Int,Int,Int}[]       # (λ, s, old t, new t)
+    for s in 1:S
+        fmin = minimum(f); cand = findall(t -> f[t] == fmin, 1:T)
+        ℓ = cand[argmin(C[s, cand])]; cur[s] = ℓ; λc = 0.0
+        while C[s, ℓ] > 0
+            best, bt = Inf, 0
+            for t in 1:T
+                C[s, t] < C[s, ℓ] || continue
+                λt = max((f[t] - f[ℓ]) / (C[s, ℓ] - C[s, t]), λc)
+                if λt < best || (λt == best && C[s, t] < C[s, bt]); best, bt = λt, t; end
+            end
+            push!(events, (best, s, ℓ, bt)); ℓ = bt; λc = best
+        end
+    end
+    budget = sum(p[s] * C[s, cur[s]] for s in 1:S)
+    if budget ≤ ε                              # λ* = 0: the budget reaches every scenario's worst outcome
+        Q = zeros(T); for s in 1:S; Q[cur[s]] += p[s]; end
+        return (sum(Q .* f), 0.0, Q)
+    end
+    sort!(events, by = e -> e[1])
+    asg = copy(cur); i = 1
+    while i ≤ length(events)
+        λb = events[i][1]; j = i
+        while j ≤ length(events) && events[j][1] == λb; j += 1; end
+        newbudget = budget + sum(p[events[k][2]] * (C[events[k][2], events[k][4]] - C[events[k][2], events[k][3]]) for k in i:j-1)
+        if newbudget ≤ ε
+            θ = (ε - newbudget) / (budget - newbudget)   # share of the switching mass left on the old outcome: budget binds exactly
+            Q = zeros(T); sw = Set(events[k][2] for k in i:j-1)
+            for s in 1:S; s in sw || (Q[asg[s]] += p[s]); end
+            for k in i:j-1; s, o, n = events[k][2], events[k][3], events[k][4]; Q[o] += θ * p[s]; Q[n] += (1 - θ) * p[s]; end
+            return (sum(Q .* f), λb, Q)
+        end
+        for k in i:j-1; asg[events[k][2]] = events[k][4]; end
+        budget = newbudget; i = j
+    end
+end
+
+function wasserstein_inner_lp(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real;
+                              unseen = zeros(0, size(m.X, 2)), cost = :l1)
+    (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("wasserstein_inner_lp requires finite ε ≥ 0, got $ε"))
+    length(a) == size(m.X, 2) || throw(ArgumentError("length(a) = $(length(a)) != size(m.X, 2) = $(size(m.X, 2))"))
+    Xs, Xt, C, p = wasserstein_support(m, unseen, cost)
+    V = Xt * collect(Float64, a)
+    all(x -> isfinite(x) && x > 0.0, V) || throw(ArgumentError("all support scenarios must have Xt * a > 0"))
+    f = log.(V); S, T = size(C)
+    model = JuMP.Model(Clarabel.Optimizer)
+    JuMP.set_silent(model)
+    JuMP.set_optimizer_attribute(model, "tol_gap_abs", 1e-12)
+    JuMP.set_optimizer_attribute(model, "tol_gap_rel", 1e-12)
+    JuMP.set_optimizer_attribute(model, "tol_feas", 1e-12)
+    JuMP.set_optimizer_attribute(model, "max_iter", 500)
+    @variable(model, γ[1:S, 1:T] >= 0)
+    for s in 1:S
+        @constraint(model, sum(γ[s, t] for t in 1:T) == p[s])
+    end
+    @constraint(model, sum(γ[s, t] * C[s, t] for s in 1:S, t in 1:T) <= Float64(ε))
+    @objective(model, Min, sum(γ[s, t] * f[t] for s in 1:S, t in 1:T))
+    JuMP.optimize!(model)
+    st = JuMP.termination_status(model)
+    st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) || throw(SolverError(string(st), "wasserstein_inner_lp solve failed"))
+    return JuMP.objective_value(model)
+end
+
+
