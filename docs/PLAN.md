@@ -25,7 +25,7 @@ unchanged) → simultaneous/correlated bets → uncertain p and payoffs + model 
 | T-ERR-2 | Parent two-bet example (0.0645, 0.0991) | Reproduced: (0.06450023479783634, 0.09915443806486002). Values match; the parent article prints 0.0991, a 4-decimal truncation — correctly rounded 0.0992 (minor presentation erratum, Task 020). |
 | — | λ·Var penalty conflicts with thesis | Present in the parent article (Beta-uncertainty section, `max_b {E_P[g] − λ Var_P[g]}`). Erratum stands. |
 | — | Half-Kelly simulations conflict with thesis | Present (code block building `res_half = 0.5 .* res_kelly.b`, "Half Kelly vs Full Kelly Battle" exercise). Relabel as baseline or remove. |
-| T-ERR-3 | Candidate erratum: "weak prior reduces fractions by over 15%" | DESIGN §5.7: with equal posterior means and independent bets, prior width alone cannot change the Bayes bet. The reduction must come from something else (mean shift, payoff sampling, Monte Carlo noise). **Unverified** until T-ERR-3 runs. |
+| T-ERR-3 | Candidate erratum: "weak prior reduces fractions by over 15%" | Not reproduced. With p ~ Beta(s·m, s(1−m)) and win ~ Bernoulli(p), each bet wins with probability m for every s, so the optimum is identical for s = 2 and s = 1000 (package: identical bets, ≤ 1e-12; total 0.163655). The reported 15.44% is consistent with Monte Carlo noise: the repo's objective re-samples with GLOBAL_RNG at every evaluation, and the article's Scenario A itself misses the exact bet by 0.0012. Erratum stands (Task 026); the parent code was not re-run. |
 
 ## Dependency Lock
 Latest registered versions on 2026-11-01 (Julia General registry / PyPI). T0 records any change the

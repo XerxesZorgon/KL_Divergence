@@ -1215,7 +1215,7 @@ Add `include("test_uncertainty.jl")` to `test/runtests.jl`. Stage with `git add 
 ---
 
 ## Task 024: Predictive from posterior draws (dependent posteriors)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-02, commit 9c867ad)
 **Milestone:** M3
 **Depends on:** 023
 
@@ -1256,3 +1256,56 @@ Stage with `git add -A` and commit with message `feat(uncertainty): predictive_f
 
 ### On Failure
 `TASK 024 FAILED — [which of 1–3] — [part, seed, case, expected vs got] — [error text]`
+
+**Result:** predictive-from-draws testset 110 Pass; QUICK suite 35 504 Pass.
+
+---
+
+## Task 025: Sampled payoffs and Monte Carlo standard error of growth
+**Status:** [ ] Pending
+**Milestone:** M3
+**Depends on:** 024
+
+### What to do
+In `code/src/uncertainty.jl` add and export `sampled_payoffs` and `growth_se` (DESIGN §4.4); add `import Distributions` to
+`src/Kelly_KL.jl` if not already present.
+- `sampled_payoffs(p, samplers, M::Integer; rng, cash = true)`: independent binary bets with win probabilities `p` and,
+  for each bet, a payoff sampler — either a `Distributions.Sampleable` (drawn with `rand(rng, s)`) or a function
+  `rng -> w`. Validate `length(samplers) == length(p) = n`, `1 ≤ n ≤ 16`, `M ≥ 1`, `M * 2^n ≤ 1_048_576` (`ArgumentError`),
+  `p` in [0, 1]. Draw `W[m, k]` for `m in 1:M`, then `k in 1:n` (this order, for reproducibility); every draw must be
+  finite and `> 0` (`ArgumentError` naming m and k). Rows are M blocks of 2^n scenarios: row `(m - 1) * 2^n + s` uses the
+  usual bit layout `wins(s, k)`, with `π = prod(wins ? p[k] : 1 - p[k]) / M` and bet entries `wins ? W[m, k] : 0.0`
+  (leading cash column of ones when `cash = true`). Assets as `simultaneous_bets`; `structure = :sampled`.
+- `growth_se(m::ScenarioModel, a)`: requires `m.structure == :sampled` (`ArgumentError`); with
+  `n = size(m.X, 2) - m.has_cash`, `B = 2^n`, `M = size(m.X, 1) ÷ B`, per-draw growth
+  `g[i] = M * sum(m.π[r] * log((m.X * a)[r]) for r in (i - 1) * B + 1 : i * B)`; return `std(g) / sqrt(M)`
+  (`Statistics.std`, corrected) — and `0.0` when `M == 1`.
+Add to `code/test/test_uncertainty.jl` a new `@testset "uncertainty: sampled payoffs"`:
+(a) **Layout / duplicate draws:** `ms = sampled_payoffs([0.3, 0.25], [_ -> 4.0, _ -> 6.0], 3; rng = StableRNG(1201))`;
+`mb = simultaneous_bets([0.3, 0.25], [4.0, 6.0])`; `@test ms.X == vcat(mb.X, mb.X, mb.X)`; `@test ms.π ≈ repeat(mb.π, 3) ./ 3` (atol 1e-15);
+`r = optimal_allocation(ms)`, `assert_certified(r, ms)`, `@test maximum(abs.(r.a .- optimal_allocation(mb).a)) ≤ 1e-10`;
+`@test growth_se(ms, r.a) ≤ 1e-15`.
+(b) **Payoff spread cuts the stake (Jensen):** single bet `p = [0.5]`; an alternating sampler
+`st = Ref(0); alt = _ -> (st[] += 1; isodd(st[]) ? 1.5 : 2.9)` (sample mean exactly 2.2);
+`ms = sampled_payoffs([0.5], [alt], 2; rng = StableRNG(1202))`; `r = optimal_allocation(ms)`; `assert_certified(r, ms)`;
+`@test abs(r.a[2] - 0.07177777608818334) ≤ 1e-10` (root of the first-order condition, computed with brentq) and
+`@test r.a[2] < (0.5 * 2.2 - 1) / (2.2 - 1) - 0.01` (fixed payoff 2.2 gives 0.0833: spread alone cuts the stake ~14%).
+(c) **SE matches its definition:** `ms = sampled_payoffs([0.4, 0.35], [Distributions.Uniform(1.8, 3.6), Distributions.Uniform(2.0, 4.0)], 500; rng = StableRNG(1203))`;
+`r = optimal_allocation(ms)`; `assert_certified(r, ms)`; recompute `g` by hand from the definition above and
+`@test growth_se(ms, r.a) ≈ std(g) / sqrt(500)` (rtol 1e-12); `@test growth_se(ms, r.a) > 0`.
+(d) **Validation:** a sampler returning `-1.0` throws `ArgumentError`; `M = 0` throws `ArgumentError`;
+`growth_se(simultaneous_bets([0.3], [4.0]), [0.9, 0.1])` throws `ArgumentError`.
+Stage with `git add -A` and commit with message `feat(uncertainty): sampled_payoffs and growth_se`.
+
+### Files touched
+- `code/src/uncertainty.jl`, `code/src/Kelly_KL.jl` (exports/imports) — one concern: payoff uncertainty
+- `code/test/test_uncertainty.jl` — new testset
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `uncertainty: sampled payoffs` shows ≥ 16 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 025 FAILED — [which of 1–3] — [part, expected vs got] — [error text]`
