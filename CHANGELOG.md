@@ -30,13 +30,25 @@ completed task (AGENTS.md Part 7).
 - Task 029: `growth_curve`, `zero_growth_point` (T-DIA-3)
 - Task 030: `drawdown_probability`, `effective_multiple`, `ruin_probability_classical`, `n_detect`, `n_relative` (T-DIA-1, 2, 4)
 - Task 031: `simulate_ruin` with `fixed_stake`, `target` and `min_fraction` (T-DIA-6)
+- Task 033: `kl_worst_case` (1-D dual), `kl_inner_direct` (oracle) (T-ORC-4, T-ORC-7)
+- Task 034: `polish_crra` (CRRA-weighted polish; log-optimal is k = 0)
+- Task 035: `kl_cash_radius` — KL distance to the nearest no-edge world
+- Task 036: `RobustResult`, `kl_robust_allocation` (T-ORC-6, T-ORC-10)
+- Task 037: `wasserstein_worst_case` (exact breakpoint scan) (T-ORC-9 ii)
+- Task 038: `wasserstein_robust_allocation` with two-tier certificate (T-ORC-9 i, T-ORC-10, T-ORC-11)
+- Task 039: `kl_radius_chi2` (T-DIA-7)
 
 ### Changed
 - Tasks 012–013, 015: E1 experiment, plot and results moved to `experiments/` and refactored to call Kelly_KL; outputs byte-identical to `e1-original`
 - Task 014: T-E1-1 no longer tests the L/D ratio (ill-conditioned for tiny D)
+- Task 040: robust methods documented as implemented (λ search + CRRA polish; two-tier Wasserstein certificate, ADR-006 exception)
+
+### Removed
+- Task 040: ForwardDiff dependency
 
 ### Fixed
 - Task 021: polish no longer zeroes a weight needed for feasibility, and drops a weight a Newton step would push below zero (ratio test) instead of stalling
+- Task 041: `kl_cash_radius` — projected Newton with line search; infinite radius now proved, not inferred
 
 ### Existing before this changelog
 - E1 experiment (standard library only, Julia 1.13.3 Linux): `e1_kl_growth_loss.jl`, `e1_plot.jl`,

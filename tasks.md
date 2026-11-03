@@ -2232,7 +2232,7 @@ dependency; 041 CHANGELOG for M5 + full gate run.
 ---
 
 ## Task 039: KL radius from data (T-DIA-7)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-03)
 **Milestone:** M5
 **Depends on:** 038
 
@@ -2261,3 +2261,101 @@ Stage with `git add -A` and commit with message `feat(robust): kl_radius_chi2 (T
 
 ### On Failure
 `TASK 039 FAILED — [which of 1–3] — [assertion, expected vs got] — [error text]`
+
+**Result:** 11 Pass; QUICK suite 38 994 Pass.
+
+---
+
+## Task 040: Align DESIGN, SDD, TEST_PLAN and ADRs with the implemented robust methods; remove ForwardDiff
+**Status:** [x] Done (2026-11-03)
+**Milestone:** M5
+**Depends on:** 039
+
+### What to do
+**Dependency:** in `code/`, run `julia --project=. -e "using Pkg; Pkg.rm(string(:ForwardDiff))"`; delete the `ForwardDiff` entry from
+`[compat]` in `Project.toml` (if `Pkg.rm` left it) and from the `PINNED` list in `scripts/pin_environment.jl`. (ForwardDiff may remain in
+`Manifest.toml` as an indirect dependency of JuMP; that is fine.)
+**Docs** — make exactly these edits, adding no other text:
+1. `docs/DESIGN.md` §2, row `src/polish.jl`: responsibility becomes "Newton polishing on the active set for log-optimal (k = 0) and
+   CRRA-weighted (k = 1/λ) objectives; KL-robust λ search uses it"; interface `polish_crra`, `polish_log_optimal`.
+2. `docs/DESIGN.md` §3.2 `RobustResult`: add the last field `certificate::Symbol  # :kkt (saddle KKT ≤ tol) or :duality_gap (Wasserstein ties: gap ≤ 1e-7)`.
+3. `docs/DESIGN.md` §4.6: add the row `kl_cash_radius(m) -> (radius, Q)` — "KL distance to the nearest no-edge world; the KL-robust bet
+   is all cash iff ε ≥ radius; Inf when some bet mix beats cash in every scenario".
+4. `docs/DESIGN.md` §5.6: replace the paragraph that begins "Joint program: ADR-005. **Polish:**" (through the end of the "Certify:"
+   sentence) with: "**Algorithm (Task 036, replaces the planned joint Newton):** (i) ε = 0 → nominal bet; (ii) with cash, if
+   ε ≥ `kl_cash_radius(m)` the robust bet is all cash, certified by the I-projection Q (max_j E_Q[X_j] − 1 ≤ tol); (iii) otherwise the
+   joint conic program of ADR-005 seeds λ, and a 1-D search on log λ solves D(Q(λ)‖π) = ε, where for each λ the bet is the CRRA bet
+   with γ = 1 + 1/λ (`polish_crra`, k = 1/λ; dH/dλ = D − ε by the envelope theorem). **Certify:** KKT residual of a* under
+   Q* ∝ π·V^{−1/λ*} ≤ 1e-10 and |D(Q*‖π) − ε| ≤ 1e-10. **v1 limit:** if λ* → 0 (no bracket) — e.g. a bet mix that beats cash in every
+   scenario with a large ε — `CertificationError` is thrown."
+5. `docs/DESIGN.md` §5.9: replace the "**Polish:** … **Certify:** …" sentences with: "**Algorithm (Task 038):** joint conic program
+   (ADR-006) → structure iteration (polish the bet under the exact worst case Q with a 1e-300 weight floor on every support row,
+   recompute Q, repeat ≤ 10 times). **Certify (two-tier, ADR-006 amendment):** tier 1 — Q unchanged and KKT of a* under Q* ≤ 1e-10;
+   tier 2 (tied worst cases) — duality gap U − L ≤ 1e-7, with U = optimal growth under the conic dual transport plan's marginal (a
+   distribution in the ball) and L = the exact worst case of the returned bet."
+6. `docs/DESIGN.md` §7: delete the ForwardDiff row.
+7. `docs/PLAN.md` Dependency Lock: change the ForwardDiff row's Kind cell to "removed (Task 040)".
+8. `docs/SDD.md`: in the success criterion about certified bets, append "(exception: tied Wasserstein worst cases are certified by a
+   duality gap ≤ 1e-7 — ADR-006 amendment, decided 2026-11-03)".
+9. Append to the end of `docs/adr/ADR-004-solver-strategy.md`: "## Amendment (Task 040, 2026-11-03)\nRobust bets do not use a
+   ForwardDiff joint Newton: the KL ball uses the CRRA-weighted polish with analytic gradient and Hessian inside a 1-D λ search, and
+   the Wasserstein ball uses structure iteration plus a two-tier certificate (ADR-005, ADR-006 amendments). ForwardDiff was removed."
+10. Append to `docs/adr/ADR-005-kl-robust-objective.md`: "## Amendment (Task 036–040, 2026-11-03)\nImplemented as: cash test via the
+    no-edge I-projection (`kl_cash_radius`: robust bet is all cash iff ε ≥ D_min = min{D(Q‖π): E_Q[X_j] ≤ 1 ∀ bets}), else conic seed
+    + 1-D λ search with the CRRA polish. Prototype: 120/120 cases classified like the joint conic; 83/83 interior cases certified to
+    1.6e-14. v1 limit: λ* → 0 without cash-optimality throws `CertificationError`."
+11. Append to `docs/adr/ADR-006-wasserstein-finite-support.md`: "## Amendment (Tasks 037–040, 2026-11-03) — accepted exception\nInner worst
+    case: exact breakpoint scan (matches LP to 4e-15). Robust bet: structure iteration certifies KKT ≤ 1e-10 when the worst case is
+    unique (84% of 150 prototype cases; 25/30 in the QUICK suite); tied worst cases cycle, and are certified instead by a duality gap
+    ≤ 1e-7 (prototype max 5.0e-8; suite max 1.17e-8). Decided by John on 2026-11-03 (two-tier certificate) rather than delaying v1 for
+    an exact active-pair Newton, which failed on ties and λ* = 0 in prototyping."
+12. `docs/TEST_PLAN.md`: in the T-ORC-9 row append "(certificate tier reported; tier 2 allowed at gap ≤ 1e-7)"; in the T-ORC-6 row append
+    "(also: CRRA bet from a uniform start equals the robust bet ≤ 1e-8; robust worst case ≥ that of random bets)".
+Run the QUICK reference suite. Stage with `git add -A` and commit with message
+`docs: align DESIGN/SDD/TEST_PLAN/ADRs with implemented robust methods; remove ForwardDiff`.
+
+### Files touched
+- `code/Project.toml`, `code/Manifest.toml`, `code/scripts/pin_environment.jl` (dependency removal)
+- `code/docs/DESIGN.md`, `docs/PLAN.md`, `docs/SDD.md`, `docs/TEST_PLAN.md`, `docs/adr/ADR-004…`, `ADR-005…`, `ADR-006…`
+  (one concern: documentation matches the code)
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`, Aqua included, every testset 0 Fail / 0 Error;
+2. `git grep -n ForwardDiff -- src test Project.toml scripts` prints nothing;
+3. `git grep -n "Amendment" -- docs/adr` prints exactly 3 lines (ADR-004, ADR-005, ADR-006);
+4. `git grep -n "certificate::Symbol" -- docs/DESIGN.md` prints 1 line and `git grep -n "kl_cash_radius" -- docs/DESIGN.md` prints ≥ 2 lines;
+5. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 040 FAILED — [which of 1–5] — [observed output] — [error text]`
+
+**Result:** docs aligned; ForwardDiff removed; QUICK suite 38 994 Pass incl. Aqua.
+
+---
+
+## Task 041: M5 documentation and full gate run
+**Status:** [ ] Pending
+**Milestone:** M5
+**Depends on:** 040
+
+### What to do
+In `code/CHANGELOG.md`, under `## [Unreleased]`, append to `### Added`: "Task 033: `kl_worst_case` (1-D dual), `kl_inner_direct` (oracle) (T-ORC-4, T-ORC-7)",
+"Task 034: `polish_crra` (CRRA-weighted polish; log-optimal is k = 0)", "Task 035: `kl_cash_radius` — KL distance to the nearest no-edge world",
+"Task 036: `RobustResult`, `kl_robust_allocation` (T-ORC-6, T-ORC-10)", "Task 037: `wasserstein_worst_case` (exact breakpoint scan) (T-ORC-9 ii)",
+"Task 038: `wasserstein_robust_allocation` with two-tier certificate (T-ORC-9 i, T-ORC-10, T-ORC-11)", "Task 039: `kl_radius_chi2` (T-DIA-7)";
+to `### Changed`: "Task 040: robust methods documented as implemented (λ search + CRRA polish; two-tier Wasserstein certificate, ADR-006 exception)";
+and to `### Removed`: "Task 040: ForwardDiff dependency". Then run the **full** reference suite (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`,
+`set KELLY_KL_QUICK=`, then `julia --project=. -e "using Pkg; Pkg.test()"`). Stage with `git add -A` and commit with message `docs: CHANGELOG for M5`.
+
+### Files touched
+- `code/CHANGELOG.md` — one concern: M5 documentation
+
+### Acceptance Criterion
+1. The full reference run exits 0 with `Testing Kelly_KL tests passed`, every testset 0 Fail / 0 Error / 0 Broken;
+2. report the total Pass count and wall time, and from the full-mode Wasserstein-robust testset the `:kkt` / `:duality_gap` counts and largest gap;
+3. `git grep -n "Task 038" -- CHANGELOG.md` prints exactly one line;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 041 FAILED — [which of 1–4] — [failing testset and message] — [error text]`

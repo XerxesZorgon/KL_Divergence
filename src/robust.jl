@@ -75,42 +75,48 @@ function kl_inner_direct(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real)
 end
 
 """
-    kl_cash_radius(m::ScenarioModel; newton_max = 100, outer_max = 20, tol = 1e-12) -> (radius, Q)
+    kl_cash_radius(m::ScenarioModel; maxit = 2000, tol = 1e-13) -> (radius, Q)
 
 KL distance from `m` to the nearest "no-edge" world (`E_Q[X_j] ≤ 1` for every bet column),
 measuring the KL robustness margin of the edge. `radius = 0` means Kelly already holds only
 cash; `radius = Inf` means no `Q` in any KL ball removes every edge, so the KL-robust bet
-never goes to all cash.
+never goes to all cash. Projected Newton on the dual; `Inf` is returned only with a proof;
+an undecidable, nearly degenerate model throws `CertificationError`.
 """
-function kl_cash_radius(m::ScenarioModel; newton_max = 100, outer_max = 20, tol = 1e-12)
+function kl_cash_radius(m::ScenarioModel; maxit = 2000, tol = 1e-13)
     m.has_cash || throw(ArgumentError("kl_cash_radius needs a model with cash"))
     pos = findall(>(0.0), m.π); p = m.π[pos]
     Y = m.X[pos, 2:end] .- 1.0; n = size(Y, 2); μ = zeros(n)
+    φ(μ) = (z = -(Y * μ) .+ log.(p); mz = maximum(z); -(mz + log(sum(exp.(z .- mz)))))   # concave dual; = D_min at the optimum
     Qof(μ) = (lw = log.(p) .- Y * μ; lw .-= maximum(lw); Q = exp.(lw); Q ./ sum(Q))   # Q ∝ π·exp(−Σ μ_j (X_j − 1))
-    for _ in 1:outer_max
-        for _ in 1:newton_max
-            A = findall(>(0.0), μ); isempty(A) && break
-            Q = Qof(μ); g = Y' * Q                       # gradient of the concave dual = E_Q[X_j − 1]
-            YA = Y[:, A]; c = YA' * Q
-            H = -(YA' * (YA .* Q) .- c * c')             # Hessian = −Cov_Q
-            d = pinv(H) * (-g[A])
-            tmax, iblk = 1.0, 0
-            for i in eachindex(A)
-                if d[i] < 0 && μ[A[i]] + d[i] ≤ 0.0
-                    ti = μ[A[i]] / -d[i]; ti < tmax && ((tmax, iblk) = (ti, i))
-                end
+    kkt(μ, g) = max(maximum(abs, g[μ .> 0]; init = 0.0), maximum(g[μ .== 0]; init = 0.0))
+    φmax = log(1 / minimum(p))                     # D(Q‖π) ≤ log(1/π_min) for every Q
+    for _ in 1:maxit                               # projected Newton (Bertsekas) on max φ(μ), μ ≥ 0
+        Q = Qof(μ); g = Y' * Q; k0 = kkt(μ, g)
+        k0 ≤ tol && break
+        F = findall(j -> μ[j] > 0 || g[j] > 0, 1:n)
+        YF = Y[:, F]; c = YF' * Q
+        H = -(YF' * (YF .* Q) .- c * c')           # = −Cov_Q(Y_F)
+        d = zeros(n); d[F] = (H - (1e-12 + norm(g[F])) * I) \ (-g[F])   # Levenberg: ascent even when H is singular
+        t = 1.0; φ0 = φ(μ)
+        while t > 1e-16
+            μn = max.(μ .+ t .* d, 0.0)
+            if k0 > 1e-6
+                φ(μn) ≥ φ0 + 1e-4 * dot(g, μn .- μ) && break      # far from the optimum: Armijo on φ
+            else
+                kkt(μn, Y' * Qof(μn)) < k0 && break               # near it φ is flat to rounding: accept a smaller KKT residual
             end
-            μ[A] .+= tmax .* d; iblk > 0 && (μ[A[iblk]] = 0.0); μ .= max.(μ, 0.0)
-            iblk == 0 && maximum(abs, tmax .* d) < 1e-15 && break
+            t /= 2
         end
-        Q = Qof(μ); g = Y' * Q
-        add = [j for j in 1:n if μ[j] == 0.0 && g[j] > tol]
-        isempty(add) && maximum(abs, g[μ .> 0]; init = 0.0) ≤ tol && break
-        for j in add; μ[j] = 1e-6; end
+        μn = max.(μ .+ t .* d, 0.0); μn == μ && break; μ = μn
+        # exact proofs that no no-edge world exists: the dual exceeds every possible D, or μ is a bet mix beating cash everywhere
+        (φ(μ) > φmax + 1e-9 || minimum(Y * μ) > 0) && return (Inf, Qof(μ))
     end
-    all(==(0.0), μ) && return (0.0, p)          # no bet has an edge under π: the model itself is the nearest no-edge world
+    all(==(0.0), μ) && return (0.0, p)             # no bet has an edge under π
     Q = Qof(μ)
-    maximum(Y' * Q; init = -Inf) > tol && return (Inf, Q)   # no-edge world not reached: some bet mix beats cash everywhere
+    minimum(Y * μ) > 0 && return (Inf, Q)
+    cert = maximum(Y' * Q)
+    cert > 1e-12 && throw(CertificationError(cert, 1e-12, :kl, "cash radius undecided (nearly degenerate model)"))
     return (max(kl(Q, p), 0.0), Q)
 end
 
