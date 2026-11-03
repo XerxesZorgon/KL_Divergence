@@ -61,3 +61,68 @@ function kl_inner_direct(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real)
     return (sum(Q_val .* f), Q_val)
 end
 
+"""
+    kl_cash_radius(m::ScenarioModel; newton_max = 100, outer_max = 20, tol = 1e-12) -> (radius, Q)
+
+KL distance from `m` to the nearest "no-edge" world (`E_Q[X_j] ≤ 1` for every bet column),
+measuring the KL robustness margin of the edge. `radius = 0` means Kelly already holds only
+cash; `radius = Inf` means no `Q` in any KL ball removes every edge, so the KL-robust bet
+never goes to all cash.
+"""
+function kl_cash_radius(m::ScenarioModel; newton_max = 100, outer_max = 20, tol = 1e-12)
+    m.has_cash || throw(ArgumentError("kl_cash_radius needs a model with cash"))
+    pos = findall(>(0.0), m.π); p = m.π[pos]
+    Y = m.X[pos, 2:end] .- 1.0; n = size(Y, 2); μ = zeros(n)
+    Qof(μ) = (lw = log.(p) .- Y * μ; lw .-= maximum(lw); Q = exp.(lw); Q ./ sum(Q))   # Q ∝ π·exp(−Σ μ_j (X_j − 1))
+    for _ in 1:outer_max
+        for _ in 1:newton_max
+            A = findall(>(0.0), μ); isempty(A) && break
+            Q = Qof(μ); g = Y' * Q                       # gradient of the concave dual = E_Q[X_j − 1]
+            YA = Y[:, A]; c = YA' * Q
+            H = -(YA' * (YA .* Q) .- c * c')             # Hessian = −Cov_Q
+            d = pinv(H) * (-g[A])
+            tmax, iblk = 1.0, 0
+            for i in eachindex(A)
+                if d[i] < 0 && μ[A[i]] + d[i] ≤ 0.0
+                    ti = μ[A[i]] / -d[i]; ti < tmax && ((tmax, iblk) = (ti, i))
+                end
+            end
+            μ[A] .+= tmax .* d; iblk > 0 && (μ[A[iblk]] = 0.0); μ .= max.(μ, 0.0)
+            iblk == 0 && maximum(abs, tmax .* d) < 1e-15 && break
+        end
+        Q = Qof(μ); g = Y' * Q
+        add = [j for j in 1:n if μ[j] == 0.0 && g[j] > tol]
+        isempty(add) && maximum(abs, g[μ .> 0]; init = 0.0) ≤ tol && break
+        for j in add; μ[j] = 1e-6; end
+    end
+    all(==(0.0), μ) && return (0.0, p)          # no bet has an edge under π: the model itself is the nearest no-edge world
+    Q = Qof(μ)
+    maximum(Y' * Q; init = -Inf) > tol && return (Inf, Q)   # no-edge world not reached: some bet mix beats cash everywhere
+    return (max(kl(Q, p), 0.0), Q)
+end
+
+function kl_cash_radius_direct(m::ScenarioModel)
+    m.has_cash || throw(ArgumentError("kl_cash_radius_direct needs a model with cash"))
+    pos = findall(>(0.0), m.π); p = m.π[pos]; S_pos = length(pos)
+    J = size(m.X, 2)
+    model = JuMP.Model(Clarabel.Optimizer)
+    JuMP.set_silent(model)
+    JuMP.set_optimizer_attribute(model, "tol_gap_abs", 1e-12)
+    JuMP.set_optimizer_attribute(model, "tol_gap_rel", 1e-12)
+    JuMP.set_optimizer_attribute(model, "tol_feas", 1e-12)
+    JuMP.set_optimizer_attribute(model, "max_iter", 500)
+    @variable(model, Q[1:S_pos] >= 0)
+    @variable(model, r[1:S_pos])
+    @constraint(model, sum(Q) == 1)
+    for j in 2:J
+        @constraint(model, sum(Q[s] * m.X[pos[s], j] for s in 1:S_pos) <= 1.0)
+    end
+    for s in 1:S_pos
+        @constraint(model, [-r[s], Q[s], p[s]] in MOI.ExponentialCone())
+    end
+    @objective(model, Min, sum(r))
+    JuMP.optimize!(model)
+    st = JuMP.termination_status(model)
+    return st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) ? (JuMP.objective_value(model), st) : (Inf, st)
+end
+

@@ -1713,7 +1713,7 @@ Sequence (full task text is written when the previous task is green):
 ---
 
 ## Task 033: KL worst case for a fixed bet — dual and direct oracle (T-ORC-4, T-ORC-7)
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-03, commit 779c716)
 **Milestone:** M5
 **Depends on:** 032
 
@@ -1776,3 +1776,173 @@ Add `include("test_robust.jl")` to `test/runtests.jl`. Stage with `git add -A` a
 
 ### On Failure
 `TASK 033 FAILED — [which of 1–3] — [part, seed, case, dual vs direct or D − ε] — [error text]`
+
+**Result:** 196 Pass; QUICK suite 36 981 Pass (2 m 00 s).
+
+---
+
+## Task 034: Polish generalized to CRRA weights
+**Status:** [x] Done (2026-11-03, commit 524e60d)
+**Milestone:** M5
+**Depends on:** 033
+
+### What to do
+In `code/src/polish.jl` replace `polish_log_optimal` by a general `polish_crra(X, π, a0, k; act_tol = 1e-6, newton_max = 50, outer_max = 10, step_tol = 1e-15, add_tol = 1e-12, tol = CERT_TOL)`
+for the concave objective U(a) = −λ·log E_π[V(a)^{−1/λ}] with `k = 1/λ ≥ 0` (CRRA risk aversion γ = 1 + k; `k = 0` is log
+utility), and keep `polish_log_optimal(X, π, a0; kw...) = polish_crra(X, π, a0, 0.0; kw...)` so existing callers are unchanged.
+Implement exactly (prototyped 2026-11-03: 83 KL-robust cases certified to 1.6e-14; single-bet CRRA stakes equal the closed form
+to 5.9e-13 for k ∈ {0, 0.5, 2, 10}):
+```julia
+function crra_weights(Xp, πp, a, k)
+    V = Xp * a
+    lw = log.(πp) .- k .* log.(V); lw .-= maximum(lw); Q = exp.(lw); Q ./= sum(Q)
+    return Q, V
+end
+
+function polish_crra(X, π, a0, k; act_tol = 1e-6, newton_max = 50, outer_max = 10, step_tol = 1e-15, add_tol = 1e-12, tol = CERT_TOL)
+    k ≥ 0 || throw(ArgumentError("k = 1/λ must be ≥ 0"))
+    pos = findall(>(0.0), π); Xp = X[pos, :]; πp = π[pos]
+    a = [x < act_tol ? 0.0 : x for x in a0]; a ./= sum(a)
+    if any(<=(0.0), Xp * a)
+        a = max.(collect(Float64, a0), 0.0); a ./= sum(a)
+        any(<=(0.0), Xp * a) && (a = 0.999 .* a .+ 0.001 / length(a))
+    end
+    for _ in 1:outer_max
+        for _ in 1:newton_max
+            A = findall(>(0.0), a); kk = length(A)
+            Q, V = crra_weights(Xp, πp, a, k); Y = Xp ./ V
+            r = Y' * Q; YA = Y[:, A]
+            g = r[A]
+            H = -(1 + k) .* (YA' * (YA .* Q)) .+ k .* (r[A] * r[A]')
+            K = [H ones(kk); ones(1, kk) 0.0]
+            d = (pinv(K) * vcat(-g, 0.0))[1:kk]
+            tmax, iblk = 1.0, 0
+            for i in 1:kk
+                if d[i] < 0 && a[A[i]] + d[i] ≤ 0.0
+                    ti = a[A[i]] / -d[i]; ti < tmax && ((tmax, iblk) = (ti, i))
+                end
+            end
+            t = tmax; drop = iblk > 0
+            while t ≥ 1e-12
+                an = copy(a); an[A] .+= t .* d; drop && (an[A[iblk]] = 0.0)
+                all(≥(0.0), an) && all(>(0.0), Xp * an) && break
+                t /= 2; drop = false
+            end
+            t < 1e-12 && break
+            a[A] .+= t .* d; drop && (a[A[iblk]] = 0.0)
+            a .= max.(a, 0.0); a ./= sum(a)
+            !drop && maximum(abs, t .* d) < step_tol && break
+        end
+        Q, V = crra_weights(Xp, πp, a, k); r = (Xp ./ V)' * Q
+        add = [j for j in eachindex(a) if a[j] == 0.0 && r[j] > 1 + add_tol]
+        isempty(add) && kkt_residual(Xp, a, Q) ≤ tol && break
+        for j in add; a[j] = 1e-8; end
+        a ./= sum(a)
+    end
+    Q, _ = crra_weights(Xp, πp, a, k)
+    return a, kkt_residual(Xp, a, Q)
+end
+```
+(The gradient of U is r^Q = Σ_s Q_s X_s/V_s with Q ∝ π·V^{−k}; its Hessian is −(1+k)·E_Q[y yᵀ] + k·r rᵀ with y = X/V;
+the returned residual is the KKT residual under Q, so for `k = 0` it equals the old log-optimal residual up to rounding.)
+Add to `code/test/test_polish.jl` a new `@testset "polish: CRRA weights"` (StableRNG; `using Kelly_KL: polish_crra, solve_conic`):
+(a) **Closed form**, seed 1701, 500 cases: `p = 0.05 + 0.85 * rand(rng)`, `w = (1.02 + 0.3 * rand(rng)) / p`,
+`k = rand(rng, (0.0, 0.5, 2.0, 10.0))`; `(a, ρ) = polish_crra([1.0 w; 1.0 0.0], [p, 1 - p], [0.5, 0.5], k)`;
+`R = (p * (w - 1) / (1 - p))^(1 / (1 + k))`; `@test abs(a[2] - (R - 1) / (w - 1 + R)) ≤ 1e-10`; `@test ρ ≤ 1e-10`.
+(b) **Correlated models**, seed 1702, `QUICK ? 30 : 100` cases (Task 021 correlated generator), `k = exp(log(0.1) + rand(rng) * log(100))`:
+`(a, ρ) = polish_crra(m.X, m.π, solve_conic(m), k)`; `@test ρ ≤ 1e-10`.
+(c) **Wrapper unchanged in behavior:** for the Task 018 regression case (`pb`, `w`, `a0`), `polish_log_optimal` still gives
+`ρ ≤ 1e-10` and `a[1] > 0`; `polish_crra(m.X, m.π, a0, -1.0)` throws `ArgumentError`.
+Stage with `git add -A` and commit with message `feat(polish): CRRA-weighted polish (k = 1/λ); log-optimal is k = 0`.
+
+### Files touched
+- `code/src/polish.jl` — generalized (one concern: polishing); `code/test/test_polish.jl` — new testset
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `polish: CRRA weights` shows ≥ 1 030 Pass, 0 Fail, 0 Error; every other testset (including all conic, general-model,
+   E1 and errata tests) 0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 034 FAILED — [which of 1–3] — [part, seed, case, k, stake error or ρ] — [error text]`
+
+**Result:** polish: CRRA weights 1 033 Pass; QUICK suite 38 014 Pass (1 m 53 s).
+
+---
+
+## Task 035: The KL cash radius (no-edge I-projection)
+**Status:** [ ] Pending
+**Milestone:** M5
+**Depends on:** 034
+
+### What to do
+In `code/src/robust.jl` add and export `kl_cash_radius`, and add the internal oracle `kl_cash_radius_direct`.
+- `kl_cash_radius(m::ScenarioModel)` → `(radius, Q)`: requires `m.has_cash` (`ArgumentError`). The KL distance from the model
+  to the nearest "no-edge" world, D_min = min{ D(Q‖π) : E_Q[X_j] ≤ 1 for every bet column j } (Q over `pos = findall(>(0.0), m.π)`).
+  The KL-robust bet is all cash exactly when ε ≥ D_min. Implement exactly (prototyped 2026-11-03: classified 120 of 120 cases
+  like the joint conic program, certificates max_j E_Q[X_j] − 1 ≤ 4.5e-16):
+  ```julia
+  function kl_cash_radius(m::ScenarioModel; newton_max = 100, outer_max = 20, tol = 1e-12)
+      m.has_cash || throw(ArgumentError("kl_cash_radius needs a model with cash"))
+      pos = findall(>(0.0), m.π); p = m.π[pos]
+      Y = m.X[pos, 2:end] .- 1.0; n = size(Y, 2); μ = zeros(n)
+      Qof(μ) = (lw = log.(p) .- Y * μ; lw .-= maximum(lw); Q = exp.(lw); Q ./ sum(Q))   # Q ∝ π·exp(−Σ μ_j (X_j − 1))
+      for _ in 1:outer_max
+          for _ in 1:newton_max
+              A = findall(>(0.0), μ); isempty(A) && break
+              Q = Qof(μ); g = Y' * Q                       # gradient of the concave dual = E_Q[X_j − 1]
+              YA = Y[:, A]; c = YA' * Q
+              H = -(YA' * (YA .* Q) .- c * c')             # Hessian = −Cov_Q
+              d = pinv(H) * (-g[A])
+              tmax, iblk = 1.0, 0
+              for i in eachindex(A)
+                  if d[i] < 0 && μ[A[i]] + d[i] ≤ 0.0
+                      ti = μ[A[i]] / -d[i]; ti < tmax && ((tmax, iblk) = (ti, i))
+                  end
+              end
+              μ[A] .+= tmax .* d; iblk > 0 && (μ[A[iblk]] = 0.0); μ .= max.(μ, 0.0)
+              iblk == 0 && maximum(abs, tmax .* d) < 1e-15 && break
+          end
+          Q = Qof(μ); g = Y' * Q
+          add = [j for j in 1:n if μ[j] == 0.0 && g[j] > tol]
+          isempty(add) && maximum(abs, g[μ .> 0]; init = 0.0) ≤ tol && break
+          for j in add; μ[j] = 1e-6; end
+      end
+      Q = Qof(μ)
+      maximum(Y' * Q; init = -Inf) > tol && return (Inf, Q)   # no-edge world not reached: some bet mix beats cash everywhere
+      return (kl(Q, p), Q)
+  end
+  ```
+  Docstring: interpretation (the KL "robustness margin" of your edge); `radius = 0` means Kelly already holds only cash;
+  `radius = Inf` means no Q in any KL ball removes every edge, so the KL-robust bet never goes to all cash.
+- `kl_cash_radius_direct(m)` (internal oracle) → `(value, status)`: over `pos`, variables `Q ≥ 0`, `r`; minimize `sum(r)` subject to
+  `sum(Q) == 1`, `sum(Q[s] * m.X[pos[s], j] for s) ≤ 1` for each bet column j ≥ 2, `[-r[s], Q[s], p[s]] ∈ MOI.ExponentialCone()`;
+  Clarabel with the tight attributes of `kl_inner_direct`; return `(JuMP.objective_value(model), st)` when `st ∈ (OPTIMAL, ALMOST_OPTIMAL)`,
+  else `(Inf, st)` — no `SolverError` here, because infeasibility is a legitimate answer.
+Add to `code/test/test_robust.jl` a new `@testset "robust: KL cash radius"` (StableRNG; `using Kelly_KL: kl_cash_radius_direct`):
+(a) **Analytic:** `m = correlated_bets([0.6, 0.4], [2.0; 0.0;;])` (one even-money bet with a 60% win chance):
+`(r, Q) = kl_cash_radius(m)`; `@test abs(r - 0.020410997260127586) ≤ 1e-12` (= D(Bern(0.5)‖Bern(0.6))); `@test abs(Q[1] - 0.5) ≤ 1e-12`.
+(b) **Kelly-cash ⇔ zero radius**, seed 1801, 200 single events with cash (Task 008 seed-103 generator):
+`@test (kl_cash_radius(single_event(q, ohat))[1] ≤ 1e-14) == (greedy_allocation(q, ohat)[1] == 1.0)`.
+(c) **Certificate and oracle**, seed 1802, `QUICK ? 50 : 200` correlated cases (Task 021 generator): `(r, Q) = kl_cash_radius(m)`;
+`(rd, st) = kl_cash_radius_direct(m)`; if `isfinite(r)`: `@test maximum(m.X[:, 2:end]' * Q) - 1 ≤ 1e-10`, `@test r ≥ 0`,
+`@test abs(r - rd) ≤ 1e-7`; else `@test st == MOI.INFEASIBLE` (use `Kelly_KL.MOI`).
+(d) **Dominant bet:** `kl_cash_radius(correlated_bets([0.5, 0.5], [1.5; 1.2;;]))[1] == Inf` (the bet never pays less than cash).
+(e) **Validation:** a model without cash throws `ArgumentError`.
+Stage with `git add -A` and commit with message `feat(robust): kl_cash_radius — the KL distance to the nearest no-edge world`.
+
+### Files touched
+- `code/src/robust.jl`, `code/src/Kelly_KL.jl` (export) — one concern: the cash radius
+- `code/test/test_robust.jl` — new testset
+
+### Acceptance Criterion
+1. QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `robust: KL cash radius` shows ≥ 250 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. report how many of the (c) cases had `radius == Inf`;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 035 FAILED — [which of 1–4] — [part, seed, case, r vs rd, status] — [error text]`
