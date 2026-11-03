@@ -2335,7 +2335,7 @@ Run the QUICK reference suite. Stage with `git add -A` and commit with message
 ---
 
 ## Task 041: M5 documentation and full gate run
-**Status:** [ ] Pending
+**Status:** [x] Done (2026-11-03, after Fix 041a)
 **Milestone:** M5
 **Depends on:** 040
 
@@ -2413,3 +2413,9 @@ Keep the docstring; add to it: "Projected Newton on the dual; `Inf` is returned 
 model throws `CertificationError`." Then rerun the **full** reference suite and commit as in Task 041 (CHANGELOG `### Fixed` gains
 "Task 041: `kl_cash_radius` — projected Newton with line search; infinite radius now proved, not inferred").
 Acceptance as Task 041.
+
+**Result (Fix 041a):** full reference suite 51 746 Pass in 2 m 57 s; Wasserstein-robust (full): 83 `:kkt`, 17 `:duality_gap`,
+largest gap 1.17e-8.
+
+**M5 complete (2026-11-03).** Gate met: T-ORC-4, 6, 7, 9, 10, 11 and T-DIA-7 green in the full run. Next: John's diff review
+(`git log --oneline 779c716~1..HEAD`), optional /refactor (robust.jl is the largest file), then M6 (experiments E2–E7).

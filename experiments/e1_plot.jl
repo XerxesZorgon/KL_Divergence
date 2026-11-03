@@ -5,6 +5,7 @@
 # The bound L ≤ D(p‖q) appears as the ceiling y = 1.
 
 using Random, Printf
+include(joinpath(@__DIR__, "plotting.jl"))
 
 const GROUPS = [   # (label, cases, color, marker)
     ("Full investment (with or without fees)", ["A_full_investment", "A2_full_inv_fees"], "#2a78d6", :circle),
@@ -23,21 +24,6 @@ function read_results(path)
         push!(rows, (String(f[ic]), parse(Float64, f[ik]), parse(Float64, f[il])))
     end
     rows
-end
-
-function marker(io, shape, x, y, color; r=4.0)
-    a = 0.55
-    if shape == :circle
-        @printf(io, "<circle cx=\"%.1f\" cy=\"%.1f\" r=\"%.1f\" fill=\"%s\" fill-opacity=\"%.2f\"/>\n", x, y, r, color, a)
-    elseif shape == :square
-        @printf(io, "<rect x=\"%.1f\" y=\"%.1f\" width=\"%.1f\" height=\"%.1f\" fill=\"%s\" fill-opacity=\"%.2f\"/>\n", x-r, y-r, 2r, 2r, color, a)
-    elseif shape == :triangle
-        @printf(io, "<polygon points=\"%.1f,%.1f %.1f,%.1f %.1f,%.1f\" fill=\"%s\" fill-opacity=\"%.2f\"/>\n",
-                x, y-1.2r, x-1.1r, y+0.8r, x+1.1r, y+0.8r, color, a)
-    else
-        @printf(io, "<polygon points=\"%.1f,%.1f %.1f,%.1f %.1f,%.1f %.1f,%.1f\" fill=\"%s\" fill-opacity=\"%.2f\"/>\n",
-                x, y-1.3r, x+1.1r, y, x, y+1.3r, x-1.1r, y, color, a)
-    end
 end
 
 function main(; csv=joinpath(@__DIR__, "output", "e1_results.csv"),
@@ -76,7 +62,7 @@ function main(; csv=joinpath(@__DIR__, "output", "e1_results.csv"),
             g = filter(r -> r[1] in cases, rows)
             g = length(g) > per_group ? g[randperm(rng, length(g))[1:per_group]] : g
             for (_, d, l) in g
-                (xmin <= log10(d) <= xmax) && marker(io, shape, px(d), py(clamp(l/d, ymin, ymax)), color)
+                (xmin <= log10(d) <= xmax) && svg_marker(io, shape, px(d), py(clamp(l/d, ymin, ymax)), color)
             end
         end
         @printf(io, "<text x=\"%d\" y=\"%.1f\" font-size=\"12\" fill=\"%s\">L = D(p‖q): exact, and an upper bound</text>\n", L+8, py(1)-8, ink)
@@ -88,13 +74,8 @@ function main(; csv=joinpath(@__DIR__, "output", "e1_results.csv"),
         @printf(io, "<text x=\"%d\" y=\"%d\" font-size=\"12\" font-weight=\"bold\" fill=\"%s\">Betting setup</text>\n", lx, ly, ink)
         for (k, (label, _, color, shape)) in enumerate(GROUPS)
             y = ly + 34k
-            marker(io, shape, lx + 6, y - 4, color; r=5.0)
-            words = split(label, " ")
-            # wrap at ~26 chars
-            line1, line2 = "", ""
-            for w in words
-                length(line1) + length(w) < 26 && line2 == "" ? (line1 = strip(line1 * " " * w)) : (line2 = strip(line2 * " " * w))
-            end
+            svg_marker(io, shape, lx + 6, y - 4, color; r=5.0)
+            line1, line2 = wrap_label(label)
             @printf(io, "<text x=\"%d\" y=\"%d\" font-size=\"11\" fill=\"%s\">%s</text>\n", lx + 18, y, ink, line1)
             line2 != "" && @printf(io, "<text x=\"%d\" y=\"%d\" font-size=\"11\" fill=\"%s\">%s</text>\n", lx + 18, y + 12, ink, line2)
         end
