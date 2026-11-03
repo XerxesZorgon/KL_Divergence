@@ -1147,3 +1147,65 @@ Run the reference suite in QUICK mode (one cmd session: `set KELLY_KL_REFERENCE_
 
 **M2 complete (2026-11-02).** Gate met: full suite 43 286 Pass (Task 021 run) incl. T-ORC-1 (conic), T-ORC-3, T-ORC-5,
 T-ORC-8, T-ERR-2. Next: checkpoint + John's diff review (`git log --oneline 3230e88~1..HEAD`), optional /refactor, then M3.
+M2 diff reviewed by John (2026-11-02): 7 commits 1f56a59…cda7c5b. /refactor skipped (polish kept whole by design).
+
+---
+
+# Milestone M3 — Uncertain probabilities and payoffs, model averaging
+
+Sequence (full task text is written when the previous task is green):
+023. `src/uncertainty.jl` — `beta_predictive`, `dirichlet_predictive`, `mixture`, `bma_weights`; T-ORC-12, T-ORC-13
+024. `predictive_from_draws` (dependent posteriors) — independence limit and dependence effect tests
+025. `sampled_payoffs`, `growth_se` (payoff uncertainty) — scenario layout, Monte Carlo SE tests
+026. T-ERR-3 — parent article's "weaker prior cuts the bets by over 15%" claim, re-run and documented
+027. CHANGELOG for M3
+Gate: full `Pkg.test()` green incl. T-ORC-12, T-ORC-13, T-ERR-3.
+
+---
+
+## Task 023: Predictives, mixtures and BMA weights (T-ORC-12, T-ORC-13)
+**Status:** [ ] Pending
+**Milestone:** M3
+**Depends on:** 022
+
+### What to do
+Create `code/src/uncertainty.jl`, include it from `src/Kelly_KL.jl` after `polish.jl`, and export `beta_predictive`,
+`dirichlet_predictive`, `mixture`, `bma_weights`. Implement (DESIGN §4.4, §5.7):
+- `beta_predictive(α, β)`: validate equal lengths ≥ 1, all finite and `> 0` (`ArgumentError`); return `α ./ (α .+ β)`.
+  Docstring: for independent binary events the Bayes-optimal bet uses exactly these posterior means — prior width
+  alone does not change the bet (DESIGN §5.7).
+- `dirichlet_predictive(α)`: validate length ≥ 1, finite, `> 0`; return `α ./ sum(α)`.
+- `mixture(models, weights)`: validate `length(models) == length(weights) ≥ 1`; every model has the same `X` (`==`),
+  `assets` and `has_cash` as the first (`ArgumentError` naming the first mismatching index); weights finite, `≥ 0`,
+  `abs(sum(weights) - 1) ≤ PROB_TOL`. Return `ScenarioModel(sum(weights[i] .* models[i].π for i in eachindex(models)), models[1].X; assets = models[1].assets, has_cash = models[1].has_cash, structure = :mixture)`.
+- `bma_weights(logml)`: validate length ≥ 1 and all finite; return softmax via log-sum-exp:
+  `m = maximum(logml); w = exp.(logml .- m); w ./ sum(w)`.
+Create `code/test/test_uncertainty.jl` with `@testset "uncertainty: predictives, mixture, BMA"` (StableRNG):
+- **T-ORC-12 (posterior collapse)**, seed 1001, 100 cases: `n = 3`; means `m = 0.1 .+ 0.5 .* rand(rng, n)`; edges
+  `e = 0.02 .+ 0.28 .* rand(rng, n)`; gross payoffs `w = (1 .+ e) ./ m`; for each `s ∈ (2.0, 10.0, 1000.0)`:
+  `p̄ = beta_predictive(s .* m, s .* (1 .- m))`, `r_s = optimal_allocation(simultaneous_bets(p̄, w))`, `assert_certified`;
+  `@test maximum(abs.(r_2.a .- r_1000.a)) ≤ 1e-12` and `@test maximum(abs.(r_10.a .- r_1000.a)) ≤ 1e-12`.
+- **T-ORC-13 (mixture linearity)**, seed 1002, 100 cases: `S = rand(rng, 4:32)`, `n = rand(rng, 2:6)`,
+  `W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]`; three models `correlated_bets(π_i, W)` with
+  `π_i` normalized `randexp(rng, S)`; weights normalized `randexp(rng, 3)`; `mm = mixture(models, weights)`; for 10 random
+  allocations `a` (normalized `randexp(rng, n + 1)`): `@test abs(growth(mm, a) - sum(weights[i] * growth(models[i], a) for i in 1:3)) ≤ 1e-12`;
+  and `assert_certified(optimal_allocation(mm), mm)` (structure `:mixture` takes the conic path).
+- **BMA:** `bma_weights(log.([1.0, 2.0, 3.0])) ≈ [1, 2, 3] ./ 6` (atol 1e-15); `bma_weights([1000.0, 1001.0]) ≈ [1, ℯ] ./ (1 + ℯ)`
+  (atol 1e-15, no overflow); `bma_weights([0.0, -Inf])` throws `ArgumentError`.
+- **Validation:** `beta_predictive([1.0], [0.0])`, `dirichlet_predictive([0.0, 1.0])`, `mixture` with differing `X`, and
+  `mixture` with weights `[0.5, 0.6]` each throw `ArgumentError`.
+Add `include("test_uncertainty.jl")` to `test/runtests.jl`. Stage with `git add -A` and commit with message
+`feat(uncertainty): predictives, mixture, BMA weights (T-ORC-12, T-ORC-13)`.
+
+### Files touched
+- `code/src/uncertainty.jl` — new; `code/src/Kelly_KL.jl` — include + exports (one concern: posterior predictives and mixtures)
+- `code/test/test_uncertainty.jl` — new; `code/test/runtests.jl` — include line
+
+### Acceptance Criterion
+1. Reference run in QUICK mode (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`) exits 0 with `Testing Kelly_KL tests passed`;
+2. testset `uncertainty: predictives, mixture, BMA` shows ≥ 1 800 Pass, 0 Fail, 0 Error; every other testset 0 Fail / 0 Error / 0 Broken;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 023 FAILED — [which of 1–3] — [test ID, seed, case, expected vs got] — [error text]`
