@@ -1946,3 +1946,12 @@ Stage with `git add -A` and commit with message `feat(robust): kl_cash_radius �
 
 ### On Failure
 `TASK 035 FAILED — [which of 1–4] — [part, seed, case, r vs rd, status] — [error text]`
+
+**Attempt 1 (2026-11-03): FAILED** — (c) seed 1802, case 3: `r = -3.84e-16` (`rd = -8.8e-13`, OPTIMAL). All bets lacked an edge
+under π, so μ = 0 and Q = π up to the log/exp round trip; `kl` returned −3.8e-16. Rounding, not a logic error. 6 of 50 QUICK (c)
+cases had radius = Inf.
+
+### Fix 035a
+In `kl_cash_radius`, immediately after the outer loop: `all(==(0.0), μ) && return (0.0, p)` (no bet has an edge under π: the
+model itself is the nearest no-edge world, radius exactly 0); and change the final line to `return (max(kl(Q, p), 0.0), Q)`.
+Rerun the QUICK reference suite and commit as in Task 035. Acceptance as Task 035.

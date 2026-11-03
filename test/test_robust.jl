@@ -1,5 +1,5 @@
 using StableRNGs, Random
-using Kelly_KL: kl_cash_radius_direct, greedy_allocation
+using Kelly_KL: kl_cash_radius_direct, greedy_allocation, polish_crra, kl_robust_conic
 
 @testset "robust: KL worst case (T-ORC-4, T-ORC-7)" begin
     # T-ORC-4, seed 1601
@@ -104,5 +104,66 @@ end
 
     # (e) Validation
     @test_throws ArgumentError kl_cash_radius(single_event([0.5, 0.5], [2.0, 2.0]; cash = false))
+end
+
+@testset "robust: KL-robust bet (T-ORC-6, T-ORC-10)" begin
+    # (a) Analytic single bet
+    m_a = correlated_bets([0.6, 0.4], [2.0; 0.0;;])
+    for (ε, f) in (
+        (0.001, 0.1560563420293526),
+        (0.005, 0.10143706865613433),
+        (0.01, 0.06033774487079824),
+        (0.015, 0.02872571386602285),
+    )
+        r = kl_robust_allocation(m_a, ε)
+        @test abs(r.a[2] - f) ≤ 1e-10
+        @test r.kkt ≤ 1e-10
+    end
+    r_cash = kl_robust_allocation(m_a, 0.03)
+    @test r_cash.a == [1.0, 0.0]
+    @test r_cash.worst_case_growth == 0.0
+
+    # (b) T-ORC-6 and max-min property, seed 1901
+    rng = StableRNG(1901)
+    N_b = QUICK ? 20 : 100
+    n_cash = 0
+    for _ in 1:N_b
+        S = rand(rng, 4:64)
+        n = rand(rng, 2:11)
+        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
+        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
+        m = correlated_bets(π, W)
+        ε = exp(log(1e-3) + rand(rng) * (log(0.5) - log(1e-3)))
+        r = kl_robust_allocation(m, ε)
+        r.a[1] == 1.0 && (n_cash += 1)
+        @test r.kkt ≤ 1e-10
+        @test abs(r.worst_case_growth - kl_worst_case(m, r.a, ε)[1]) ≤ 1e-10
+        if 0 < r.λ < Inf
+            @test abs(kl(r.Q, m.π) - ε) ≤ 1e-10
+            J = size(m.X, 2)
+            ac, ρc = polish_crra(m.X, m.π, fill(1 / J, J), 1 / r.λ)
+            @test maximum(abs.(ac .- r.a)) ≤ 1e-8
+        end
+        J = size(m.X, 2)
+        for _ in 1:5
+            xb = randexp(rng, J); b = xb ./ sum(xb)
+            @test kl_worst_case(m, b, ε)[1] ≤ r.worst_case_growth + 1e-10
+        end
+    end
+    println("kl_robust_allocation (b): $n_cash / $N_b models returned all cash")
+
+    # (c) T-ORC-10 (KL): seed 1902, 20 correlated models
+    rng = StableRNG(1902)
+    for _ in 1:20
+        S = rand(rng, 4:64)
+        n = rand(rng, 2:11)
+        xπ = randexp(rng, S); π = xπ ./ sum(xπ)
+        W = [rand(rng) < 0.4 ? 1 + 4 * rand(rng) : 0.0 for s in 1:S, k in 1:n]
+        m = correlated_bets(π, W)
+        @test maximum(abs.(kl_robust_allocation(m, 0.0).a .- optimal_allocation(m).a)) ≤ 1e-9
+    end
+
+    # (d) Validation
+    @test_throws ArgumentError kl_robust_allocation(m_a, -0.1)
 end
 

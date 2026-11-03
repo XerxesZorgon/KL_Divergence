@@ -1,3 +1,15 @@
+struct RobustResult
+    a::Vector{Float64}
+    worst_case_growth::Float64
+    nominal_growth::Float64
+    λ::Float64
+    Q::Vector{Float64}
+    support::Matrix{Float64}
+    kkt::Float64
+    ball::Symbol
+    ε::Float64
+end
+
 function _validate_kl_inner_inputs(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real, name::AbstractString)
     (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("$name requires finite ε ≥ 0, got $ε"))
     length(a) == size(m.X, 2) || throw(ArgumentError("$name: length(a) = $(length(a)) != size(m.X, 2) = $(size(m.X, 2))"))
@@ -124,5 +136,76 @@ function kl_cash_radius_direct(m::ScenarioModel)
     JuMP.optimize!(model)
     st = JuMP.termination_status(model)
     return st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) ? (JuMP.objective_value(model), st) : (Inf, st)
+end
+
+function kl_robust_conic(m::ScenarioModel, ε::Real; solver::Symbol = :clarabel)
+    solver in (:clarabel, :scs) || throw(ArgumentError("solver must be :clarabel or :scs, got :$solver"))
+    pos = findall(>(0.0), m.π); p = m.π[pos]; Xp = m.X[pos, :]; S_pos = length(pos); J = size(m.X, 2)
+    model = JuMP.Model(solver === :clarabel ? Clarabel.Optimizer : SCS.Optimizer)
+    JuMP.set_silent(model)
+    @variable(model, a[1:J] >= 0)
+    @variable(model, λ >= 0)
+    @variable(model, t)
+    @variable(model, w[1:S_pos])
+    @variable(model, z[1:S_pos])
+    @constraint(model, sum(a) == 1)
+    @constraint(model, sum(p[s] * z[s] for s in 1:S_pos) <= λ)
+    for s in 1:S_pos
+        @constraint(model, [t - w[s], λ, z[s]] in MOI.ExponentialCone())
+        @constraint(model, [w[s], 1.0, sum(Xp[s, j] * a[j] for j in 1:J)] in MOI.ExponentialCone())
+    end
+    @objective(model, Max, t - λ * Float64(ε))
+    JuMP.optimize!(model)
+    st = JuMP.termination_status(model)
+    st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) || throw(SolverError(string(st), "kl_robust_conic solve failed (:$solver)"))
+    a_val = max.(JuMP.value.(a), 0.0)
+    return (a_val ./ sum(a_val), JuMP.value(λ))
+end
+
+"""
+    kl_robust_allocation(m::ScenarioModel, ε; solver = :clarabel, tol = CERT_TOL) -> RobustResult
+
+The bet maximizing worst-case expected log growth over the KL ball `{Q : D(Q‖π) ≤ ε}`;
+equals the CRRA bet with `γ = 1 + 1/λ*`; all cash exactly when `ε ≥ kl_cash_radius(m)`;
+a model without cash whose `λ* → 0` throws `CertificationError` (v1 limit).
+"""
+function kl_robust_allocation(m::ScenarioModel, ε::Real; solver::Symbol = :clarabel, tol = CERT_TOL)
+    (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("kl_robust_allocation requires finite ε ≥ 0, got $ε"))
+    pos = findall(>(0.0), m.π); p = m.π[pos]; Xp = m.X[pos, :]; J = size(m.X, 2); εf = Float64(ε)
+    if εf == 0.0
+        r = optimal_allocation(m; solver, tol)
+        return RobustResult(r.a, r.growth, r.growth, Inf, p, Xp, r.kkt, :kl, 0.0)
+    end
+    if m.has_cash
+        (D_min, Qc) = kl_cash_radius(m)
+        if εf ≥ D_min
+            a = [1.0; zeros(J - 1)]
+            ρ = kkt_residual(Xp, a, Qc)
+            ρ ≤ tol || throw(CertificationError(ρ, tol, :kl, "cash certificate"))
+            return RobustResult(a, 0.0, 0.0, 0.0, Qc, Xp, ρ, :kl, εf)
+        end
+    end
+    (a, λ0) = kl_robust_conic(m, εf; solver)
+    function Dλ(λ)                                  # re-optimize the CRRA bet at λ, warm-started, and return D(Q‖π)
+        a .= polish_crra(m.X, m.π, a, 1 / λ; tol)[1]
+        Q, _ = crra_weights(Xp, p, a, 1 / λ)
+        return kl(Q, p)
+    end
+    lo, hi = λ0 / 2, 2λ0
+    n = 0; while Dλ(lo) ≤ εf; lo /= 2; (n += 1) > 60 && throw(CertificationError(Inf, tol, :kl, "no lower bracket for λ*")); end
+    n = 0; while Dλ(hi) > εf; hi *= 2; (n += 1) > 60 && throw(CertificationError(Inf, tol, :kl, "no upper bracket for λ*")); end
+    l, h = log(lo), log(hi)
+    for _ in 1:200
+        mid = (l + h) / 2
+        Dλ(exp(mid)) > εf ? (l = mid) : (h = mid)
+        h - l < 1e-13 && break
+    end
+    λ = exp((l + h) / 2)
+    a, ρ = polish_crra(m.X, m.π, a, 1 / λ; tol)
+    Q, V = crra_weights(Xp, p, a, 1 / λ)
+    ρ ≤ tol || throw(CertificationError(ρ, tol, :kl, "saddle-point KKT residual $ρ > $tol"))
+    d_err = abs(kl(Q, p) - εf)
+    d_err ≤ tol || throw(CertificationError(d_err, tol, :kl, "KL boundary residual $d_err > $tol"))
+    return RobustResult(a, sum(Q .* log.(V)), growth(m, a), λ, Q, Xp, ρ, :kl, εf)
 end
 
