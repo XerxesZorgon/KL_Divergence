@@ -23,7 +23,7 @@ const SMOKE_EXPERIMENTS = [
             Base.include(mod, joinpath(@__DIR__, "..", "experiments", file))
             mktempdir() do dir
                 r = redirect_stdout(devnull) do
-                    Base.invokelatest(mod.main; quick = true, out_dir = dir)
+                    Base.invokelatest(() -> mod.main(; quick = true, out_dir = dir))
                 end
                 @test r.pass isa Bool
                 for f in outputs

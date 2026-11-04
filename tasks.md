@@ -3048,3 +3048,46 @@ Stage with `git add -A` and commit with message `feat(experiments): reference co
 
 ### On Failure
 `TASK 054 FAILED — [which of 1–2] — [failing test and message] — [error text]`
+
+---
+
+## Task 055: reproduce_all.jl, update_reference.jl and the committed references (T-REP-1)
+**Status:** [x] Done (2026-11-04)
+**Milestone:** M8
+**Depends on:** 054
+**Result:** Run 3 PASS (7 experiments, 21 files identical) in 14.88 min (892.64 s); E1 stress: 50000,0,1.000000134228e+00,4.089e-12; PASS.
+
+### What to do
+Claude has placed/updated four files; use them as-is:
+- `code/experiments/reproduce_all.jl` (new) — see the M8 header; loads each script into a fresh module and calls it through
+  `invokelatest`; E1 = `e1_kl_growth_loss.main` + `stress()` (written to `e1_stress.csv`) + `e1_plot.main`; prints the
+  verdict and file tables and `reproduce_all: PASS|FAIL — …`; exits 1 on any failure.
+- `code/experiments/update_reference.jl` (new) — refuses unless `KELLY_KL_REFERENCE_HOST=1` and the last run was full
+  (`output/run_meta.toml`); replaces `experiments/reference/` with the non-meta outputs.
+- `code/.gitattributes` (new) — `experiments/reference/** -text` and `test/golden/** -text`, so git never converts line endings
+  of byte-compared files (a CRLF checkout would make every reference fail exact comparison).
+- `code/test/test_experiments_smoke.jl` (tracked change, one line) — calls `main` inside `invokelatest(() -> …)`, the same
+  pattern as reproduce_all; avoids Julia 1.12 world-age warnings.
+Then, from `code/`, in one cmd session with `set KELLY_KL_REFERENCE_HOST=1` (KELLY_KL_QUICK not set):
+1. `julia --project=. experiments/reproduce_all.jl` — expected: all 7 experiments PASS, comparison FAIL with "no references",
+   exit code 1 (`echo %ERRORLEVEL%`). About 15–20 min.
+2. `julia --project=. experiments/update_reference.jl` — expected: `copied 21 files`.
+3. `julia --project=. experiments/reproduce_all.jl` again — must end `reproduce_all: PASS — 7 experiments, 21 files`, every
+   file `identical`, exit code 0. This is T-REP-1 on the reference machine and shows the outputs are deterministic.
+Stage with `git add -A` (adds `experiments/reference/`; `experiments/output/` stays ignored) and commit with message
+`feat(experiments): reproduce_all with committed references (T-REP-1)`.
+
+### Files touched
+- `code/experiments/reproduce_all.jl`, `code/experiments/update_reference.jl`, `code/.gitattributes` — new (provided);
+  `code/test/test_experiments_smoke.jl` — one line (provided); `code/experiments/reference/` — 21 generated files
+  (one concern: reproducing and freezing the experiment outputs)
+
+### Acceptance Criterion
+1. Run 1: verdicts E1–E7 all PASS; exit code 1 only because references are missing;
+2. Run 2 (`update_reference`) prints `copied 21 files`;
+3. Run 3 exits 0 with `reproduce_all: PASS — 7 experiments, 21 files`; report its wall time and the E1 stress line;
+4. `git check-attr text -- experiments/reference/e1_results.csv` prints `text: unset`;
+5. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 055 FAILED — [which of 1–5] — [the FAIL/ERROR rows of the tables] — [error text]`
