@@ -44,6 +44,7 @@ resolver makes on Julia 1.12; no other changes without a dedicated task.
 | Aqua | 0.8.18 | test |
 | Random, LinearAlgebra, Printf, Statistics, TOML, Test | stdlib | dep / test |
 | Python | 3.13.12 (recorded T0, 2026-11-01) | runtime |
+| Python (wrapper venv) | 3.14.10 (Fix 050a, 2026-11-04) | python/.venv; bundled OpenSSL ≥ 3.5 required by Julia 1.12 through juliapkg |
 | juliacall | 0.9.37 | Python dep |
 | numpy | pin at M7 install (latest at install) | Python dep |
 | pytest | pin at M7 install (latest at install) | Python test |

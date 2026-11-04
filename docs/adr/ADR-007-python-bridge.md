@@ -26,7 +26,9 @@ in `juliapkg.json`.
 
 ## Consequences
 - First import starts Julia (tens of seconds; longer on first precompile).
-- Python ≥ 3.10 required (stated in `pyproject.toml`); exact Python version recorded in T0.
+- Python ≥ 3.11 required (tomllib, Task 051). On Windows the Python build must bundle OpenSSL ≥ 3.5, because juliapkg ties
+  Julia's OpenSSL_jll to Python's and Julia 1.12 needs 3.5: python.org 3.13 builds (OpenSSL 3.0) fail, 3.14 builds work
+  (Fix 050a). Never edit juliacall's juliapkg.json to bypass this.
 - Wrapper functions are one-to-one with the Julia public API (DESIGN.md §4.8); no extra logic in
   Python, so any numeric difference is a bridge bug.
 - Shared test cases live in `test/cases/*.json`, read by both `Pkg.test()` and `pytest`.
