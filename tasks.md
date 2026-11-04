@@ -2992,3 +2992,59 @@ Stage with `git add -A` and commit with message `docs: Python wrapper in README;
 `TASK 053 FAILED — [which of 1–4] — [failing testset / test id and message] — [error text]`
 
 **M7 complete (2026-11-04).** Gate met: T-PY-1…3 green (Success Criterion 3). Next: John's review of the M7 commits (Tasks 050–053), then M8 (reproduce_all.jl, reference outputs, Aqua stale_deps re-enabled).
+
+---
+
+# Milestone M8 — Reproduce-all and reference outputs
+
+Success Criterion 1: one command reproduces every number and figure of *Extended Kelly II* and matches stored references
+(ADR-009). `experiments/reproduce_all.jl` deletes `experiments/output/`, runs E1–E7 at full size (E1 also writes
+`e1_stress.csv` with the 50 000-trial stress result), prints each experiment's own verdict, and compares every output with
+`experiments/reference/` through `experiments/compare.jl` — byte-identical on the reference machine
+(`KELLY_KL_REFERENCE_HOST=1`), relative 1e-12 elsewhere; `*_meta.toml` files are never compared. It is a separate command,
+not part of `Pkg.test()` (John's decision, 2026-11-04: the suite stays ≈ 4 min; reproduce-all ≈ 15–20 min is the
+pre-publication check). References are written once by `experiments/update_reference.jl` (reference machine, full run only).
+
+Sequence (prototyped 2026-11-04 against the package copied from this folder, Julia 1.13.3: comparator test 7 Pass;
+reproduce_all quick run twice → all 18 E2–E7 files byte-identical, i.e. the outputs are deterministic; E1 path 14 s, stress
+0 violations; update_reference refuses quick runs; Aqua with `stale_deps = (ignore = [:StableRNGs],)` 11 Pass — StableRNGs is
+the only dependency the package itself never loads):
+054. Comparator `experiments/compare.jl` + `test/test_compare.jl` (T-REP-2)
+055. `experiments/reproduce_all.jl`, `experiments/update_reference.jl`; generate and commit references; second run PASS (T-REP-1)
+056. Aqua `stale_deps` re-enabled (ignore StableRNGs, reason recorded); README, ADR-009, TEST_PLAN, CHANGELOG; final gate
+     (Pkg.test full, pytest, reproduce_all) → Definition of Done
+
+---
+
+## Task 054: Reference comparator (T-REP-2)
+**Status:** [x] Done (2026-11-04)
+**Milestone:** M8
+**Depends on:** 053
+**Result:** comparator testset 7 Pass; QUICK suite 39,102 Pass; PASS.
+
+### What to do
+Claude has placed two files (untracked); use them as-is:
+- `code/experiments/compare.jl` — `compare_file(ref, out; exact)` and `compare_dirs(ref_dir, out_dir; exact)`. Exact mode:
+  byte equality. Tolerant mode: the text is split into numbers and the text between them; text must match exactly, numbers
+  within relative 1e-12 (absolute 1e-15). `*_meta.toml` files are skipped; a missing output or an output without a reference
+  fails. Reports the first differing line.
+- `code/test/test_compare.jl` — `@testset "reference comparator (T-REP-2)"` on synthetic files: identical → pass (both modes,
+  meta ignored); one changed byte of SVG text → fail (both); a CSV digit changed by relative 4e-12 → fail (both); a
+  rounding-level change (1e-13) → fail exact, pass tolerant; an SVG coordinate moved 0.1 → fail (both); missing and
+  unreferenced files → fail.
+In `code/test/runtests.jl` add `include("test_compare.jl")` after `include("test_cases.jl")`.
+QUICK reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, `set KELLY_KL_QUICK=1`, then
+`julia --project=. -e "using Pkg; Pkg.test()"`).
+Stage with `git add -A` and commit with message `feat(experiments): reference comparator (T-REP-2)`.
+
+### Files touched
+- `code/experiments/compare.jl`, `code/test/test_compare.jl` — new (provided); `code/test/runtests.jl` — include
+  (one concern: comparing outputs with references)
+
+### Acceptance Criterion
+1. QUICK run exits 0 with `Testing Kelly_KL tests passed`; testset `reference comparator (T-REP-2)` shows 7 Pass, 0 Fail;
+   every other testset 0 Fail / 0 Error / 0 Broken; report the total Pass count (expect 39 095 + 7 = 39 102);
+2. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 054 FAILED — [which of 1–2] — [failing test and message] — [error text]`
