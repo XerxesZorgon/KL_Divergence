@@ -2645,3 +2645,38 @@ Then re-run Task 046 steps 2–7 (expect ≈ 7–12 min). Commit message: `feat(
 Report `TASK 046 PASSED — max |z| [value], wall [s]` or `TASK 046 FAILED — …` as before.
 
 **Result (Fix 046a):** max |z| = 2.00, wall 594.534 s; PASS.
+
+---
+
+## Task 047: E6 — edge-CI coverage at n_detect
+**Status:** [x] Done (2026-11-03)
+**Milestone:** M6
+**Depends on:** 046
+
+### What to do
+`code/experiments/e6_sample_size.jl` has been placed in the folder by Claude (untracked; prototyped 2026-11-03 with StableRNG 2006
+and Distributions 0.25.132 on Julia 1.13.3: coverage 0.9525 / 0.9495 / 0.9511 / 0.9509 for w = 2 / 3 / 10 / 50; PASS; 1.7 s).
+Use it as-is. A bet pays w (gross) with probability p = 1.05/w (5% edge). (a) For w ∈ {2, 3, 10, 50}: 10 000 replications of
+n = ⌈`n_detect`(p, w)⌉ outcomes (binomial draw); Wald 95% interval for the edge; coverage, share of intervals excluding zero,
+and the 2.5–97.5% range of estimated / true Kelly stake. (b) For w = 10: median and 2.5–97.5% range of estimated / true Kelly
+stake at n = 1, 2, 4, 8, 16 × n_detect and at `n_relative` (2 000 replications each).
+Outputs `output/e6_coverage.csv`, `output/e6_kelly_spread.csv`, `output/e6_sample_size.svg` (+ copy to `../img/` unless `quick`),
+`output/e6_meta.toml`. No TEST_PLAN change: the existing E6 criterion (coverage 94–96%) is used as written (binomial SE at
+10 000 replications is 0.22%, so the band is ±4.6 SE — no chance-failure problem as in E2).
+Run from `code/`: `julia --project=. experiments/e6_sample_size.jl`.
+Stage with `git add -A` and commit with message `feat(experiments): E6 — sample size to measure an edge`.
+
+### Files touched
+- `code/experiments/e6_sample_size.jl` — new (provided) (one concern: experiment E6)
+
+### Acceptance Criterion
+1. The run exits 0, prints 4 lines starting `E6: w =` and a final line `E6: PASS`; report the four coverages;
+2. `experiments/output/e6_coverage.csv` has 5 lines and `experiments/output/e6_kelly_spread.csv` has 7 lines;
+   `../img/e6_sample_size.svg` exists; `experiments/output/e6_meta.toml` contains `pass = true`;
+3. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 047 FAILED — [which of 1–3] — [printed E6 lines] — [error text]`
+
+**Result:** coverages [w=2: 0.9525, w=3: 0.9495, w=10: 0.9511, w=50: 0.9509]; PASS.
+
