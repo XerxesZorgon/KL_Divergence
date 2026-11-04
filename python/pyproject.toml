@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kelly_kl"
+version = "0.1.0"
+description = "Python wrapper for the Julia package Kelly_KL (exact, certified Kelly bets; KL and Wasserstein robust bets)"
+authors = [{ name = "John Peach" }]
+requires-python = ">=3.11"
+dependencies = ["juliacall==0.9.37", "numpy==2.5.4"]
+
+[project.optional-dependencies]
+test = ["pytest==9.2.0"]
+
+[tool.setuptools]
+packages = ["kelly_kl"]
+
+[tool.setuptools.package-data]
+kelly_kl = ["juliapkg.json"]

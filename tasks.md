@@ -2774,3 +2774,64 @@ Stage with `git add -A` and commit with message `test(experiments): E2–E7 smok
 
 **M6 complete (2026-11-03).** Gate met: E2–E7 each PASS at full size (Tasks 043–048) and run in quick
 mode inside the suite. Next: John's review of the M6 commits (Tasks 042–049), then M7 (Python wrapper).
+
+---
+
+# Milestone M7 — Python wrapper
+
+The Python package `kelly_kl` (in `code/python/`) calls the Julia package through juliacall 0.9.37 (ADR-007). It contains no
+numerical code: each function converts NumPy inputs, calls the Julia function of the same name and converts the result to NumPy
+arrays / frozen dataclasses. Julia `ArgumentError` / `DomainError` become `ValueError`; `CertificationError` and `SolverError`
+become `kelly_kl.CertificationError` / `kelly_kl.SolverError`. juliacall installs its Julia environment inside the venv
+(`python/.venv/julia_env`) with `Kelly_KL` as a dev path dependency and the same pinned versions as `Manifest.toml`
+(`kelly_kl/juliapkg.json`). Python environment: a venv at `code/python/.venv` (John's decision, 2026-11-03).
+
+Decision recorded in Task 051 (ADR-007 amendment): shared cases are TOML (`test/cases/cases.toml`), not JSON — Julia reads TOML
+with the stdlib and Python ≥ 3.11 with `tomllib`, so neither side gains a dependency; Python ≥ 3.11 is therefore required.
+
+Sequence (all four prototyped 2026-11-03 against the package copied from this folder, Julia 1.13.3 / Python 3.13 / juliacall
+0.9.37: 26 shared cases, 54 Julia checks Pass, pytest 29 Pass + T-PY-3 failing only because the prototype ran Julia 1.13.3):
+050. Python package and venv (`pyproject.toml`, `kelly_kl/__init__.py`, `kelly_kl/juliapkg.json`); first import
+051. Shared cases (`scripts/fill_cases.jl`, `test/cases/case_runner.jl`, `test/cases/cases.toml`, `test/test_cases.jl`); ADR-007 / DESIGN §3.3
+052. pytest parity tests T-PY-1…3 (`python/tests/`)
+053. README (Python section), PLAN pins, CHANGELOG for M7, full gate (Pkg.test + pytest)
+
+---
+
+## Task 050: Python package `kelly_kl` and its venv
+**Status:** [x] Done (2026-11-03)
+**Milestone:** M7
+**Depends on:** 049
+**Result:** first import 195.28 s, PYTHON_JULIAPKG_EXE not needed; julia 1.12.1; a = [0.83634533 0.06450023 0.09915444]; PASS.
+
+### What to do
+Claude has placed three files (untracked); use them as-is:
+`code/python/pyproject.toml` (name `kelly_kl` 0.1.0, Python ≥ 3.11, `juliacall==0.9.37`, `numpy==2.5.4`; extra `test`:
+`pytest==9.2.0`), `code/python/kelly_kl/__init__.py` (the wrapper: one function per Julia export, `ScenarioModel` /
+`BetResult` / `RobustResult` dataclasses, error mapping, `julia_version()`), `code/python/kelly_kl/juliapkg.json` (Julia ≥ 1.12;
+`Kelly_KL` dev path `../..`; StableRNGs, Distributions, JuMP, MathOptInterface, Clarabel, SCS pinned to the Manifest versions).
+Append to `code/.gitignore` the line `python/*.egg-info/`.
+Create the venv and install (cmd, from `code/`):
+```
+python -m venv python\.venv
+python\.venv\Scripts\python -m pip install --upgrade pip
+python\.venv\Scripts\python -m pip install -e python[test]
+python\.venv\Scripts\python -c "import kelly_kl as kk; print(kk.julia_version()); print(kk.optimal_allocation(kk.simultaneous_bets([0.3, 0.25], [4.0, 6.0])).a)"
+```
+The first import installs the Julia environment and precompiles JuMP/Clarabel/SCS (prototype: ≈ 4.5 min); later imports take
+seconds. juliacall uses the `julia` on PATH when it satisfies Julia ≥ 1.12. If the first line printed is not `1.12.1`, set
+`set PYTHON_JULIAPKG_EXE=<full path to the Julia 1.12.1 julia.exe>` and repeat the last command (and report it).
+Stage with `git add -A` and commit with message `feat(python): kelly_kl wrapper package via juliacall`.
+
+### Files touched
+- `code/python/pyproject.toml`, `code/python/kelly_kl/__init__.py`, `code/python/kelly_kl/juliapkg.json` — new (provided);
+  `code/.gitignore` — one line (one concern: the Python package)
+
+### Acceptance Criterion
+1. The last command prints `1.12.1` and then `[0.83634533 0.06450023 0.09915444]` (the parent article's two-bet example);
+2. `python\.venv\Scripts\python -m pip freeze` lists `juliacall==0.9.37`, `numpy==2.5.4`, `pytest==9.2.0`; report the full output;
+3. report the first-import time and whether `PYTHON_JULIAPKG_EXE` was needed;
+4. `git status --porcelain` prints nothing (the venv and egg-info are ignored).
+
+### On Failure
+`TASK 050 FAILED — [which of 1–4] — [last 20 lines of output] — [error text]`

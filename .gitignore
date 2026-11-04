@@ -7,3 +7,4 @@ __pycache__/
 *.jl.*.cov
 *.jl.mem
 LocalPreferences.toml
+python/*.egg-info/
