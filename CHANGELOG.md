@@ -37,11 +37,20 @@ completed task (AGENTS.md Part 7).
 - Task 037: `wasserstein_worst_case` (exact breakpoint scan) (T-ORC-9 ii)
 - Task 038: `wasserstein_robust_allocation` with two-tier certificate (T-ORC-9 i, T-ORC-10, T-ORC-11)
 - Task 039: `kl_radius_chi2` (T-DIA-7)
+- Task 042: experiments/plotting.jl — shared SVG plot, CSV and run-metadata helpers
+- Task 043: E2 — holdout log-score difference estimates ΔKL (coverage 94.8%)
+- Task 044: E3 — model averaging beats the best single model at n = 10, 50, 200
+- Task 045: E4 — overbetting cliff (zero growth at c0 = 1.997) and drawdown law x^(2/c−1)
+- Task 046: E5 — minimum-stake ruin vs the classical formula; Kelly bettor "priced out" by a minimum stake
+- Task 047: E6 — edge-CI coverage at n_detect; Kelly-stake spread vs sample size
+- Task 048: E7 — Kelly vs KL-robust vs Wasserstein-robust bets with an unseen crash; KL-radius coverage
+- Task 049: test/test_experiments_smoke.jl — E2–E7 run in quick mode
 
 ### Changed
 - Tasks 012–013, 015: E1 experiment, plot and results moved to `experiments/` and refactored to call Kelly_KL; outputs byte-identical to `e1-original`
 - Task 014: T-E1-1 no longer tests the L/D ratio (ill-conditioned for tiny D)
 - Task 040: robust methods documented as implemented (λ search + CRRA polish; two-tier Wasserstein certificate, ADR-006 exception)
+- Tasks 043, 045, 046, 048: TEST_PLAN §G criteria for E2, E4, E5, E7 made precise (binomial bands, tested ranges, SE at the hypothesised value)
 
 ### Removed
 - Task 040: ForwardDiff dependency

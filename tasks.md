@@ -2723,3 +2723,54 @@ Stage with `git add -A` and commit with message `feat(experiments): E7 — robus
 
 **Result:** W-L1 worst-case growth +0.00790, q = 0.01 growth +0.00826 (guarantee holds), coverages [n=50: 0.9314, n=200: 0.9457, n=1000: 0.9483], wall 55.568 s; PASS.
 
+---
+
+## Task 049: Experiment smoke test, M6 changelog and full gate run
+**Status:** [x] Done (2026-11-03)
+**Milestone:** M6
+**Depends on:** 048
+
+### What to do
+1. `code/test/test_experiments_smoke.jl` has been placed in the folder by Claude (untracked; prototyped 2026-11-03 against the
+   package copied from this folder: 36 Pass in 1 m 30 s on Julia 1.13.3). Use it as-is. For each of E2–E7 it loads the script into
+   a fresh module, calls `main(quick = true, out_dir = <temp dir>)`, and checks that a Bool verdict is returned, every output file
+   exists, and the meta file records the seed. It does not assert the quick-mode verdicts (too few replications for a fair
+   statistical check — e.g. E6's 94–96% band at 1 000 replications is only ±1.4 binomial SE). Quick mode writes nothing to `../img/`.
+   In `code/test/runtests.jl` add `include("test_experiments_smoke.jl")` after `include("test_e1.jl")`.
+2. In `code/docs/TEST_PLAN.md`, "Integration (experiments)" row: replace `test/experiments_smoke.jl` with
+   `test/test_experiments_smoke.jl` and "E1–E7 run without error in quick mode" with "E2–E7 run without error in quick mode and
+   write every output (E1 is covered by test_e1.jl)".
+3. In `code/CHANGELOG.md` under `## [Unreleased]`:
+   - `### Added`, after the Task 039 line, add:
+     - `- Task 042: experiments/plotting.jl — shared SVG plot, CSV and run-metadata helpers`
+     - `- Task 043: E2 — holdout log-score difference estimates ΔKL (coverage 94.8%)`
+     - `- Task 044: E3 — model averaging beats the best single model at n = 10, 50, 200`
+     - `- Task 045: E4 — overbetting cliff (zero growth at c0 = 1.997) and drawdown law x^(2/c−1)`
+     - `- Task 046: E5 — minimum-stake ruin vs the classical formula; Kelly bettor "priced out" by a minimum stake`
+     - `- Task 047: E6 — edge-CI coverage at n_detect; Kelly-stake spread vs sample size`
+     - `- Task 048: E7 — Kelly vs KL-robust vs Wasserstein-robust bets with an unseen crash; KL-radius coverage`
+     - `- Task 049: test/test_experiments_smoke.jl — E2–E7 run in quick mode`
+   - `### Changed`, at the end, add:
+     - `- Tasks 043, 045, 046, 048: TEST_PLAN §G criteria for E2, E4, E5, E7 made precise (binomial bands, tested ranges, SE at the hypothesised value)`
+4. Full reference run (one cmd session: `set KELLY_KL_REFERENCE_HOST=1`, make sure `KELLY_KL_QUICK` is not set, then
+   `julia --project=. -e "using Pkg; Pkg.test()"`).
+Stage with `git add -A` and commit with message `test(experiments): E2–E7 smoke test; M6 changelog`.
+
+### Files touched
+- `code/test/test_experiments_smoke.jl` — new (provided); `code/test/runtests.jl` — include line
+- `code/docs/TEST_PLAN.md` — integration row; `code/CHANGELOG.md` — M6 entries (one concern: M6 close-out)
+
+### Acceptance Criterion
+1. The full reference run exits 0 with `Testing Kelly_KL tests passed`; every testset 0 Fail / 0 Error / 0 Broken;
+   testset `experiments: smoke (quick mode)` shows 36 Pass;
+2. report the total Pass count and wall time;
+3. `git grep -n "Task 048" -- CHANGELOG.md` prints exactly one line;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 049 FAILED — [which of 1–4] — [failing testset and message] — [error text]`
+
+**Result:** total 51 793 Pass, wall 4 m 19.1 s, smoke 36 Pass; PASS.
+
+**M6 complete (2026-11-03).** Gate met: E2–E7 each PASS at full size (Tasks 043–048) and run in quick
+mode inside the suite. Next: John's review of the M6 commits (Tasks 042–049), then M7 (Python wrapper).

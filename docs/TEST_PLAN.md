@@ -7,7 +7,7 @@
 | Unit + oracle | Julia `Test` stdlib via `julia --project=. -e "using Pkg; Pkg.test()"` | every exported function has ≥ 1 test; line coverage of `src/` ≥ 85% (reported, not a gate alone) | Antigravity |
 | Certification invariant | `test/certify_hook.jl`: every `BetResult` / `RobustResult` created in the suite is passed to `assert_certified` | 100% of computed bets | Antigravity |
 | Package hygiene | Aqua.jl 0.8.18 (`Aqua.test_all(Kelly_KL)`) | whole package | Antigravity |
-| Integration (experiments) | each `experiments/eN_*.jl` `main(quick=true)` called from `test/experiments_smoke.jl` | E1–E7 run without error in quick mode | Antigravity |
+| Integration (experiments) | each `experiments/eN_*.jl` `main(quick=true)` called from `test/test_experiments_smoke.jl` | E2–E7 run without error in quick mode and write every output (E1 is covered by test_e1.jl) | Antigravity |
 | End-to-end | `julia --project=. experiments/reproduce_all.jl` | all E1–E7 outputs vs `experiments/reference/` | Antigravity (John confirms on reference machine) |
 | Python parity | `pytest python/tests` | every case in `test/cases/*.json` | Antigravity |
 
