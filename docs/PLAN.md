@@ -46,8 +46,9 @@ resolver makes on Julia 1.12; no other changes without a dedicated task.
 | Python | 3.13.12 (recorded T0, 2026-11-01) | runtime |
 | Python (wrapper venv) | 3.14.10 (Fix 050a, 2026-11-04) | python/.venv; bundled OpenSSL ≥ 3.5 required by Julia 1.12 through juliapkg |
 | juliacall | 0.9.37 | Python dep |
-| numpy | pin at M7 install (latest at install) | Python dep |
-| pytest | pin at M7 install (latest at install) | Python test |
+| juliapkg | 0.1.28 (installed with juliacall 0.9.37) | Python dep (transitive) |
+| numpy | 2.5.4 (Task 050) | Python dep |
+| pytest | 9.2.0 (Task 050) | Python test |
 
 `[compat]` in Project.toml uses caret bounds at these versions (e.g. `JuMP = "1.32.1"`) plus
 `julia = "1.12"`; the Manifest is the exact lock.

@@ -2950,3 +2950,45 @@ Stage with `git add -A` and commit with message `test(python): parity tests T-PY
 
 ### On Failure
 `TASK 052 FAILED — [which of 1–2] — [failing test ids and assertion messages] — [error text]`
+
+---
+
+## Task 053: README, PLAN pins, M7 changelog and full gate
+**Status:** [x] Done (2026-11-04)
+**Milestone:** M7
+**Depends on:** 052
+**Result:** Julia 51,847 Pass in 243.22 s (4m 03.2s); pytest 30 passed in 38.11 s; PASS.
+
+### What to do
+1. `code/README.md` has been updated by Claude (tracked change; use as-is): Python wrapper install on a Python 3.14 venv,
+   the Windows OpenSSL ≥ 3.5 requirement, first-import note, `PYTHON_JULIAPKG_EXE`, a Python usage example, the
+   Julia-convention notes (1-based indices, `seed`, error mapping), the pytest command; "(planned API …)" removed.
+2. `code/docs/PLAN.md`, dependency table: `numpy | pin at M7 install …` → `numpy | 2.5.4 (Task 050) | Python dep`;
+   `pytest | pin at M7 install …` → `pytest | 9.2.0 (Task 050) | Python test`; add a row
+   `| juliapkg | 0.1.28 (installed with juliacall 0.9.37) | Python dep (transitive) |`.
+3. `code/CHANGELOG.md` under `## [Unreleased]`:
+   - `### Added`, after the Task 049 line:
+     - `- Task 050: python/ — kelly_kl wrapper over the whole public API via juliacall (dataclass results, error mapping)`
+     - `- Task 051: shared parity cases test/cases/cases.toml (26 cases), scripts/fill_cases.jl, test/test_cases.jl`
+     - `- Task 052: python/tests — pytest parity T-PY-1…3 and API coverage`
+     - `- Task 053: README Python section; PLAN Python pins`
+   - `### Changed`, at the end: `- Task 051: shared cases are TOML, not JSON (no extra dependency); Python ≥ 3.11`
+   - `### Fixed`, at the end: `- Fix 050a: wrapper venv on Python 3.14 (bundled OpenSSL 3.5) instead of editing juliacall's juliapkg.json`
+4. Full gate, one cmd session from `code/`: `set KELLY_KL_REFERENCE_HOST=1`, make sure `KELLY_KL_QUICK` is not set,
+   `julia --project=. -e "using Pkg; Pkg.test()"`, then `python\.venv\Scripts\python -m pytest python\tests -q`.
+Stage with `git add -A` and commit with message `docs: Python wrapper in README; M7 changelog`.
+
+### Files touched
+- `code/README.md` (provided), `code/docs/PLAN.md`, `code/CHANGELOG.md` (one concern: M7 close-out)
+
+### Acceptance Criterion
+1. Full reference run exits 0 with `Testing Kelly_KL tests passed`, every testset 0 Fail / 0 Error / 0 Broken; report total Pass
+   and wall time (expect 51 793 + 54 = 51 847);
+2. pytest prints `30 passed`;
+3. `git grep -n "Task 052" -- CHANGELOG.md` prints exactly one line; `git grep -n "pin at M7" -- docs` prints nothing;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 053 FAILED — [which of 1–4] — [failing testset / test id and message] — [error text]`
+
+**M7 complete (2026-11-04).** Gate met: T-PY-1…3 green (Success Criterion 3). Next: John's review of the M7 commits (Tasks 050–053), then M8 (reproduce_all.jl, reference outputs, Aqua stale_deps re-enabled).

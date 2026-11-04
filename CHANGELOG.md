@@ -45,12 +45,17 @@ completed task (AGENTS.md Part 7).
 - Task 047: E6 — edge-CI coverage at n_detect; Kelly-stake spread vs sample size
 - Task 048: E7 — Kelly vs KL-robust vs Wasserstein-robust bets with an unseen crash; KL-radius coverage
 - Task 049: test/test_experiments_smoke.jl — E2–E7 run in quick mode
+- Task 050: python/ — kelly_kl wrapper over the whole public API via juliacall (dataclass results, error mapping)
+- Task 051: shared parity cases test/cases/cases.toml (26 cases), scripts/fill_cases.jl, test/test_cases.jl
+- Task 052: python/tests — pytest parity T-PY-1…3 and API coverage
+- Task 053: README Python section; PLAN Python pins
 
 ### Changed
 - Tasks 012–013, 015: E1 experiment, plot and results moved to `experiments/` and refactored to call Kelly_KL; outputs byte-identical to `e1-original`
 - Task 014: T-E1-1 no longer tests the L/D ratio (ill-conditioned for tiny D)
 - Task 040: robust methods documented as implemented (λ search + CRRA polish; two-tier Wasserstein certificate, ADR-006 exception)
 - Tasks 043, 045, 046, 048: TEST_PLAN §G criteria for E2, E4, E5, E7 made precise (binomial bands, tested ranges, SE at the hypothesised value)
+- Task 051: shared cases are TOML, not JSON (no extra dependency); Python ≥ 3.11
 
 ### Removed
 - Task 040: ForwardDiff dependency
@@ -58,6 +63,7 @@ completed task (AGENTS.md Part 7).
 ### Fixed
 - Task 021: polish no longer zeroes a weight needed for feasibility, and drops a weight a Newton step would push below zero (ratio test) instead of stalling
 - Task 041: `kl_cash_radius` — projected Newton with line search; infinite radius now proved, not inferred
+- Fix 050a: wrapper venv on Python 3.14 (bundled OpenSSL 3.5) instead of editing juliacall's juliapkg.json
 
 ### Existing before this changelog
 - E1 experiment (standard library only, Julia 1.13.3 Linux): `e1_kl_growth_loss.jl`, `e1_plot.jl`,
