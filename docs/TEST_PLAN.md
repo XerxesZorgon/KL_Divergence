@@ -9,7 +9,7 @@
 | Package hygiene | Aqua.jl 0.8.18 (`Aqua.test_all(Kelly_KL)`) | whole package | Antigravity |
 | Integration (experiments) | each `experiments/eN_*.jl` `main(quick=true)` called from `test/test_experiments_smoke.jl` | E2–E7 run without error in quick mode and write every output (E1 is covered by test_e1.jl) | Antigravity |
 | End-to-end | `julia --project=. experiments/reproduce_all.jl` | all E1–E7 outputs vs `experiments/reference/` | Antigravity (John confirms on reference machine) |
-| Python parity | `pytest python/tests` | every case in `test/cases/*.json` | Antigravity |
+| Python parity | `pytest python/tests` | every case in `test/cases/cases.toml` | Antigravity |
 
 Random tests use fixed seeds (StableRNG for new tests; E1 tests keep Xoshiro, ADR-009).
 `KELLY_KL_QUICK=1` shortens the stress tests for inner-loop runs; the full run is the gate.
@@ -61,7 +61,7 @@ Random tests use fixed seeds (StableRNG for new tests; E1 tests keep Xoshiro, AD
 ### E. Python parity (Success Criterion 3)
 | ID | What | Pass criterion |
 |---|---|---|
-| T-PY-1 | Shared cases | every case in `test/cases/*.json`: Python result vs Julia expected, abs ≤ 1e-10 on a, growth, worst-case growth, λ |
+| T-PY-1 | Shared cases | every case in `test/cases/cases.toml`: Python result vs Julia expected, abs ≤ 1e-10 on a, growth, worst-case growth, λ |
 | T-PY-2 | Error mapping | invalid π (sum 0.9) → `ValueError`; forced certification failure → `kelly_kl.CertificationError` |
 | T-PY-3 | Same Julia | `kelly_kl.julia_version()` equals the version recorded in PLAN.md |
 

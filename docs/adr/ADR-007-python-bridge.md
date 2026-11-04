@@ -31,4 +31,4 @@ in `juliapkg.json`.
   (Fix 050a). Never edit juliacall's juliapkg.json to bypass this.
 - Wrapper functions are one-to-one with the Julia public API (DESIGN.md §4.8); no extra logic in
   Python, so any numeric difference is a bridge bug.
-- Shared test cases live in `test/cases/*.json`, read by both `Pkg.test()` and `pytest`.
+- Shared test cases live in `test/cases/cases.toml`, read by both `Pkg.test()` and `pytest`.

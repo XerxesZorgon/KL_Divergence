@@ -15,7 +15,7 @@ unchanged) → simultaneous/correlated bets → uncertain p and payoffs + model 
 | M4 | Diagnostics | all §4.5 functions; T-DIA-1…6 green | M2 |
 | M5 | Robust objectives | KL-ball and Wasserstein-ball bets with polish and saddle-point certification, `kl_radius_chi2`; T-ORC-4, 6, 7, 9, 10, 11, T-DIA-7 green | M2, M4 |
 | M6 | Experiments E2–E7 | `experiments/plotting.jl` extracted (E1 SVG still byte-identical); E2–E7 scripts meet their pass criteria (TEST_PLAN §G); figures in `../img/` | M3, M4, M5 |
-| M7 | Python wrapper | `python/kelly_kl` + `juliapkg.json`; shared JSON cases filled from Julia; T-PY-1…3 green | M5 |
+| M7 | Python wrapper | `python/kelly_kl` + `juliapkg.json`; shared TOML cases filled from Julia; T-PY-1…3 green | M5 |
 | M8 | Reproduce-all and reference outputs | `reproduce_all.jl` + comparator; references generated on John's machine and committed; T-REP-1, T-REP-2, T-AQ-1 green; README/CHANGELOG updated | M6, M7 |
 
 ### Errata track (article content, not library)
