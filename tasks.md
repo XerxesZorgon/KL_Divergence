@@ -2919,3 +2919,34 @@ Stage with `git add -A` and commit with message `test: shared Julia/Python parit
 
 ### On Failure
 `TASK 051 FAILED — [which of 1–4] — [failing case id and its "differs by" message] — [error text]`
+
+---
+
+## Task 052: pytest parity tests T-PY-1…3
+**Status:** [x] Done (2026-11-04)
+**Milestone:** M7
+**Depends on:** 051
+**Result:** 30 passed in 41.25s (26 shared cases, 2 error mapping, 1 version match, 1 API coverage); PASS.
+
+### What to do
+Claude has placed three files in `code/python/tests/` (untracked); use them as-is:
+- `case_runner.py` — line-for-line Python mirror of `test/cases/case_runner.jl` (same case kinds, same outputs) and `case_error`;
+- `test_parity.py` — T-PY-1: one parametrized test per case in `test/cases/cases.toml` (max abs difference ≤ the case's tol);
+  T-PY-2: invalid probabilities and an out-of-range win probability raise `ValueError`, a forced certification failure
+  (`tol = 1e-30`) raises `kelly_kl.CertificationError`; T-PY-3: `kelly_kl.julia_version()` equals the Julia version recorded in
+  `docs/PLAN.md`; plus an API-coverage test (every Julia export has a Python attribute of the same name);
+- `conftest.py` — puts the tests folder on `sys.path` so `case_runner` imports.
+Run from `code/`: `python\.venv\Scripts\python -m pytest python\tests -v`.
+(`.pytest_cache/` and `__pycache__/` are already git-ignored.)
+Stage with `git add -A` and commit with message `test(python): parity tests T-PY-1..3 against shared cases`.
+
+### Files touched
+- `code/python/tests/case_runner.py`, `code/python/tests/test_parity.py`, `code/python/tests/conftest.py` — new (provided)
+  (one concern: Python parity tests)
+
+### Acceptance Criterion
+1. pytest exits 0 with `30 passed` (26 shared cases + 2 T-PY-2 + 1 T-PY-3 + 1 API coverage); report the summary line and time;
+2. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 052 FAILED — [which of 1–2] — [failing test ids and assertion messages] — [error text]`
