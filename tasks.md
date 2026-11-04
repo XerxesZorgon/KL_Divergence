@@ -2680,3 +2680,46 @@ Stage with `git add -A` and commit with message `feat(experiments): E6 — sampl
 
 **Result:** coverages [w=2: 0.9525, w=3: 0.9495, w=10: 0.9511, w=50: 0.9509]; PASS.
 
+---
+
+## Task 048: E7 — Kelly vs KL-robust vs Wasserstein-robust with an unseen tail; KL-radius coverage
+**Status:** [x] Done (2026-11-03)
+**Milestone:** M6
+**Depends on:** 047
+
+### What to do
+`code/experiments/e7_robust.jl` has been placed in the folder by Claude (untracked; prototyped 2026-11-03 against the real package
+— src, Project.toml and Manifest.toml copied from this folder — with StableRNG 2007 on Julia 1.13.3: PASS, 62 s). Use it as-is.
+Model: cash + assets A, B over four scenarios; truth adds a never-seen crash with probability q ∈ {0, 0.005, 0.01, 0.02, 0.05}.
+Bettors: Kelly on the model; `kl_robust_allocation` at ε = `kl_radius_chi2(4, n)`, n ∈ {200, 1 000, 5 000};
+`wasserstein_robust_allocation` with the crash as `unseen`, cost `:l1` and `:linf`, radius = 1% crash mass. Table of exact growth,
+Pr(wealth halved) and median final wealth (1 000 paths × 1 000 rounds); figure of growth vs q; KL-radius coverage over 10 000
+samples at n ∈ {50, 200, 1 000}.
+Outputs `output/e7_table.csv`, `output/e7_kl_coverage.csv`, `output/e7_robust.svg` (+ copy to `../img/` unless `quick`),
+`output/e7_meta.toml`.
+**TEST_PLAN amendment:** in `docs/TEST_PLAN.md` §G, replace the E7 criterion with: "growth / Pr(halved) / median-final table for
+Kelly, KL-robust (ε = kl_radius_chi2, n ∈ {200, 1 000, 5 000}), Wasserstein L1 and L∞ (crash as unseen scenario, radius = 1%
+crash mass) across q ∈ {0, 0.005, 0.01, 0.02, 0.05}. Pass: (i) each Wasserstein bet's growth under the truth ≥ its certified
+worst-case growth − 1e-9 whenever the truth is inside its ball (q ≤ 0.01); (ii) the same for each KL bet at q = 0; (iii) KL-radius
+coverage D(π‖p̂) ≤ kl_radius_chi2(4, n) within ±2 pp of 95% for n ∈ {200, 1 000}; n = 50 reported only — the χ² radius is
+asymptotic and its coverage there (≈ 93.3%) sits on the band edge (Task 048)".
+Run from `code/`: `julia --project=. experiments/e7_robust.jl`.
+Stage with `git add -A` and commit with message `feat(experiments): E7 — robust bets against an unseen tail`.
+
+### Files touched
+- `code/experiments/e7_robust.jl` — new (provided); `code/docs/TEST_PLAN.md` §G E7 row (one concern: experiment E7)
+
+### Acceptance Criterion
+1. The run exits 0, prints 41 lines starting `E7:` (1 cash-radius line, 6 bettor lines each followed by 5 `q =` lines,
+   3 coverage lines, and a final `E7: PASS`); no line contains `GUARANTEE VIOLATED`; report the W-L1 line, its q = 0.01 line,
+   and the three coverage values;
+2. `experiments/output/e7_table.csv` has 31 lines and `experiments/output/e7_kl_coverage.csv` has 4 lines;
+   `../img/e7_robust.svg` exists; `experiments/output/e7_meta.toml` contains `pass = true`;
+3. report the wall time;
+4. `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 048 FAILED — [which of 1–4] — [the failing E7 lines] — [error text]`
+
+**Result:** W-L1 worst-case growth +0.00790, q = 0.01 growth +0.00826 (guarantee holds), coverages [n=50: 0.9314, n=200: 0.9457, n=1000: 0.9483], wall 55.568 s; PASS.
+
