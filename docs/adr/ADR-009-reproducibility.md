@@ -42,3 +42,9 @@ change between package versions; floating-point results can differ across operat
   `E1_RESULTS.md` (different RNG stream on another Julia version). T-M1 records both; the article
   quotes the 1.12 references.
 - Updating any dependency means regenerating references in a dedicated, reviewed task.
+- Implemented in Tasks 054–055: experiments/compare.jl, reproduce_all.jl (separate from Pkg.test(); ≈ 15 min),
+  update_reference.jl (reference machine, full runs only). E1 also writes e1_stress.csv. Run 3 of Task 055 reproduced all
+  21 files byte-for-byte on the reference machine.
+- .gitattributes marks experiments/reference/ and test/golden/ as -text so git never rewrites their line endings.
+- StableRNGs stays a dependency of the package environment for the experiments and tests and is exempt from Aqua's
+  stale-dependency check (Task 056).

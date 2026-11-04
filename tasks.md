@@ -3091,3 +3091,67 @@ Stage with `git add -A` (adds `experiments/reference/`; `experiments/output/` st
 
 ### On Failure
 `TASK 055 FAILED — [which of 1–5] — [the FAIL/ERROR rows of the tables] — [error text]`
+
+---
+
+## Task 056: Aqua stale_deps, T-ERR-1 removal, documentation and final gate (Definition of Done)
+**Status:** [x] Done (2026-11-04)
+**Milestone:** M8
+**Depends on:** 055
+**Result:** Pkg.test 51,855 Pass in 251.69 s (Aqua 11/11 Pass); pytest 30 passed in 38.31 s; reproduce_all PASS (21 files identical) in 14.36 min; DoD 1–4 met; tag v0.1.0; PASS.
+
+### What to do
+1. `code/README.md` has been updated by Claude (tracked change; use as-is): the "Reproduce the article" section now describes
+   reproduce_all (time, what it does, exact vs tolerant comparison, where references came from).
+2. `code/test/runtests.jl`, Aqua testset: replace the comment and call with
+   ```julia
+   # StableRNGs is a package dependency only so that experiments/ and test/ (run with --project=.) can use it; Kelly_KL
+   # itself never loads it, so it is exempt from the stale-dependency check (Task 056, ADR-009).
+   Aqua.test_all(Kelly_KL; stale_deps = (ignore = [:StableRNGs],))
+   ```
+3. `code/docs/TEST_PLAN.md`: T-AQ-1 row criterion → "`Aqua.test_all(Kelly_KL; stale_deps = (ignore = [:StableRNGs],))` passes
+   (StableRNGs is used only by experiments/tests; Task 056)"; T-REP-1 row: append "— a separate command, not part of Pkg.test()
+   (Task 055)"; T-ERR-1 row criterion → "**Removed (Task 056).** No source for the README pair (0.0667, 0.12) was found by M2's
+   end, so by the PLAN rule the test is not written and the erratum is dropped from the article." In the Definition of Pass,
+   change "(T-ERR-1 green" … to state T-ERR-1 is removed.
+4. `code/docs/PLAN.md`: T-ERR-1 row "Action" → "**Dropped (Task 056)** — no source by M2's end; erratum removed from the
+   article plan."
+5. `code/docs/adr/ADR-009-reproducibility.md`, `## Consequences`, add:
+   - `- Implemented in Tasks 054–055: experiments/compare.jl, reproduce_all.jl (separate from Pkg.test(); ≈ 15 min),
+     update_reference.jl (reference machine, full runs only). E1 also writes e1_stress.csv. Run 3 of Task 055 reproduced all
+     21 files byte-for-byte on the reference machine.`
+   - `- .gitattributes marks experiments/reference/ and test/golden/ as -text so git never rewrites their line endings.`
+   - `- StableRNGs stays a dependency of the package environment for the experiments and tests and is exempt from Aqua's
+     stale-dependency check (Task 056).`
+6. `code/CHANGELOG.md` under `## [Unreleased]`:
+   - `### Added`, after the Task 053 line: `- Task 054: experiments/compare.jl — reference comparator (T-REP-2)`,
+     `- Task 055: experiments/reproduce_all.jl, update_reference.jl; committed experiments/reference/ (21 files); .gitattributes`,
+     `- Task 056: Aqua stale-dependency check re-enabled (StableRNGs exempt)`
+   - `### Changed`, at the end: `- Task 055: experiment smoke test calls main through invokelatest (Julia 1.12 world age)`
+   - `### Removed`, at the end: `- Task 056: T-ERR-1 (no source for the (0.0667, 0.12) README pair; erratum dropped)`
+7. Final gate, one cmd session from `code/` with `set KELLY_KL_REFERENCE_HOST=1` (KELLY_KL_QUICK not set):
+   `julia --project=. -e "using Pkg; Pkg.test()"`, then `python\.venv\Scripts\python -m pytest python\tests -q`, then
+   `julia --project=. experiments/reproduce_all.jl` and `echo %ERRORLEVEL%`.
+8. Check the Definition of Done in `docs/PLAN.md` item by item and report each: (1) reproduce_all exits 0 with references
+   committed and T-REP-2 passing; (2) full Pkg.test exits 0 incl. oracle tests, T-E1, T-DIA, T-ERR-2, T-ERR-3, T-ERR-1 removed,
+   0 uncertified bets; (3) pytest exits 0; (4) README documents install/usage/tests/reproduce-all, CHANGELOG has an entry per
+   task, DESIGN.md §8 says "None.".
+Stage with `git add -A` and commit with message `chore: M8 — Aqua stale_deps, T-ERR-1 removed, docs; v0.1.0 gate`.
+Then tag: `git tag -a v0.1.0 -m "Kelly_KL v0.1.0 — Definition of Done met (Tasks 001–056)"`.
+
+### Files touched
+- `code/README.md` (provided), `code/test/runtests.jl`, `code/docs/TEST_PLAN.md`, `code/docs/PLAN.md`,
+  `code/docs/adr/ADR-009-reproducibility.md`, `code/CHANGELOG.md` (one concern: closing M8 and the project)
+
+### Acceptance Criterion
+1. Full Pkg.test exits 0 with `Testing Kelly_KL tests passed`, every testset 0 Fail / 0 Error / 0 Broken, Aqua testset all Pass;
+   report total Pass and wall time;
+2. pytest prints `30 passed`;
+3. reproduce_all exits 0 with `reproduce_all: PASS — 7 experiments, 21 files`;
+4. all four Definition-of-Done items reported as met;
+5. `git tag -l v0.1.0` prints `v0.1.0`; `git status --porcelain` prints nothing.
+
+### On Failure
+`TASK 056 FAILED — [which of 1–5] — [failing testset / test / file and message] — [error text]`
+
+**M8 complete — project v0.1.0 shipped (2026-11-04).** Gate met: Definition of Done met (Tasks 001–056). Next: John's final review; then the article (Extended Kelly II) is drafted from `OUTLINE.md` with every number traced to `experiments/reference/`.

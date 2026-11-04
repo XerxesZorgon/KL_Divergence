@@ -54,7 +54,7 @@ Random tests use fixed seeds (StableRNG for new tests; E1 tests keep Xoshiro, AD
 ### D. Errata re-verification tests
 | ID | What | Pass criterion |
 |---|---|---|
-| T-ERR-1 | Parent README example "(0.0667, 0.12) vs numerical optimum (0.0745, 0.3725)" | **Blocked until source is supplied** (PLAN task T-ERR-1). Then: re-solve the stated objective with the package; test asserts the certified optimum and records whether (0.0745, 0.3725) and/or (0.0667, 0.12) is correct to 4 d.p. If no source exists, the test is removed and the erratum dropped. |
+| T-ERR-1 | Parent README example "(0.0667, 0.12) vs numerical optimum (0.0745, 0.3725)" | **Removed (Task 056).** No source for the README pair (0.0667, 0.12) was found by M2's end, so by the PLAN rule the test is not written and the erratum is dropped from the article. |
 | T-ERR-2 | Parent two-bet example (regression) | (p, w) = (0.3, 4.0), (0.25, 6.0), gross payoffs, cash: certified bet rounds to the published (0.0645, 0.0991) at 4 d.p. (prototype 2026-11-01: 0.06450023, 0.09915443); full-precision value stored |
 | T-ERR-3 | Parent "weak prior reduces fractions 15%" claim (candidate erratum) | Re-run the parent `kelly_general_bayes.jl` inputs (s_A = 1000 vs s_B = 2) with the package's predictive; report whether the reduction persists when posterior means are equal. Pass = test documents the observed reduction (value stored), not a fixed expectation |
 
@@ -68,9 +68,9 @@ Random tests use fixed seeds (StableRNG for new tests; E1 tests keep Xoshiro, AD
 ### F. End-to-end (Success Criterion 1)
 | ID | What | Pass criterion |
 |---|---|---|
-| T-REP-1 | Reproduce all | `julia --project=. experiments/reproduce_all.jl` exits 0; table shows PASS for every file of E1–E7 |
+| T-REP-1 | Reproduce all | `julia --project=. experiments/reproduce_all.jl` exits 0; table shows PASS for every file of E1–E7 — a separate command, not part of Pkg.test() (Task 055) |
 | T-REP-2 | Comparator catches changes | altering one byte of a reference SVG and one digit in a reference CSV → both FAIL, exit 1 |
-| T-AQ-1 | Aqua | `Aqua.test_all(Kelly_KL)` passes |
+| T-AQ-1 | Aqua | `Aqua.test_all(Kelly_KL; stale_deps = (ignore = [:StableRNGs],))` passes (StableRNGs is used only by experiments/tests; Task 056) |
 
 ### G. Experiment pass criteria (from OUTLINE.md, checked inside each experiment and in T-REP-1)
 | Exp | Pass criterion |
@@ -85,8 +85,7 @@ Random tests use fixed seeds (StableRNG for new tests; E1 tests keep Xoshiro, AD
 
 ## Definition of Pass
 All of the following, on John's machine with the pinned Manifest:
-1. `Pkg.test()` exits 0 with the full (non-quick) stress test; every A–D test green (T-ERR-1 green
-   or formally removed per PLAN).
+1. `Pkg.test()` exits 0 with the full (non-quick) stress test; every A–D test green (T-ERR-1 removed per PLAN).
 2. Certification hook reports 0 bets with ρ > 1e-10.
 3. `pytest python/tests` exits 0 (T-PY-1..3).
 4. `reproduce_all.jl` exits 0 (T-REP-1) and T-REP-2 passes.

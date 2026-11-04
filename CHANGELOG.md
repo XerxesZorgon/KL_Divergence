@@ -49,6 +49,9 @@ completed task (AGENTS.md Part 7).
 - Task 051: shared parity cases test/cases/cases.toml (26 cases), scripts/fill_cases.jl, test/test_cases.jl
 - Task 052: python/tests — pytest parity T-PY-1…3 and API coverage
 - Task 053: README Python section; PLAN Python pins
+- Task 054: experiments/compare.jl — reference comparator (T-REP-2)
+- Task 055: experiments/reproduce_all.jl, update_reference.jl; committed experiments/reference/ (21 files); .gitattributes
+- Task 056: Aqua stale-dependency check re-enabled (StableRNGs exempt)
 
 ### Changed
 - Tasks 012–013, 015: E1 experiment, plot and results moved to `experiments/` and refactored to call Kelly_KL; outputs byte-identical to `e1-original`
@@ -56,9 +59,11 @@ completed task (AGENTS.md Part 7).
 - Task 040: robust methods documented as implemented (λ search + CRRA polish; two-tier Wasserstein certificate, ADR-006 exception)
 - Tasks 043, 045, 046, 048: TEST_PLAN §G criteria for E2, E4, E5, E7 made precise (binomial bands, tested ranges, SE at the hypothesised value)
 - Task 051: shared cases are TOML, not JSON (no extra dependency); Python ≥ 3.11
+- Task 055: experiment smoke test calls main through invokelatest (Julia 1.12 world age)
 
 ### Removed
 - Task 040: ForwardDiff dependency
+- Task 056: T-ERR-1 (no source for the (0.0667, 0.12) README pair; erratum dropped)
 
 ### Fixed
 - Task 021: polish no longer zeroes a weight needed for feasibility, and drops a weight a Newton step would push below zero (ratio test) instead of stalling

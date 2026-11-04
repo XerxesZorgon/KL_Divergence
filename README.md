@@ -77,11 +77,17 @@ Python follows Julia's conventions where they differ from Python's: outcome indi
 `ArgumentError` / `DomainError` arrive as `ValueError`, and certification or solver failures as
 `kelly_kl.CertificationError` / `kelly_kl.SolverError`.
 
-Reproduce the article *(planned, milestone M8)*:
+Reproduce the article (Success Criterion 1, ADR-009):
 
 ```bash
-julia --project=. experiments/reproduce_all.jl
+julia --project=. experiments/reproduce_all.jl     # ≈ 15 min; exit code 0 = everything reproduced
 ```
+
+It deletes `experiments/output/`, runs experiments E1–E7 at full size (refreshing the figures in `../img/`), prints each
+experiment's own pass/fail verdict, and compares all 21 outputs with the committed `experiments/reference/`: byte-identical
+on the reference machine (`KELLY_KL_REFERENCE_HOST=1`), within relative 1e-12 elsewhere (run metadata such as wall time is
+not compared). References were generated on Julia 1.12.1, Windows 11, with the pinned `Manifest.toml`; regenerating them
+(`experiments/update_reference.jl`, reference machine only) is a reviewed change of its own.
 
 ## Running tests
 ```bash

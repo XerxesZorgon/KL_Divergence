@@ -4,8 +4,9 @@ const QUICK = get(ENV, "KELLY_KL_QUICK", "0") == "1"
 
 @testset verbose=true "Kelly_KL" begin
     @testset "Aqua (T-AQ-1)" begin
-        # stale_deps re-enabled in M8 (T-AQ-1 full), once every dependency is used
-        Aqua.test_all(Kelly_KL; stale_deps = false)
+        # StableRNGs is a package dependency only so that experiments/ and test/ (run with --project=.) can use it; Kelly_KL
+        # itself never loads it, so it is exempt from the stale-dependency check (Task 056, ADR-009).
+        Aqua.test_all(Kelly_KL; stale_deps = (ignore = [:StableRNGs],))
     end
     include("certify_hook.jl")
     include("test_model.jl")
