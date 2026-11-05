@@ -14,6 +14,12 @@ Run from `code/`: `julia --project=. experiments/e1_kl_growth_loss.jl` (writes `
 | Cash, 10% margin + 5% commission | 3000 | 0.18 | 100% | 0.69 |
 | Stress (cash, n 2–12, wide σ, τ, ρ, c) | 50 000 | — | 100% (0 violations) | max L/D = 1.000000 (6 decimals; the exact maximum is 1 + 1.3e-7, at a trial with D = 1.45e-9 — rounding error in L amplified by 1/D. The tested bound is L ≤ D + 1e-10; Task 014.) |
 
+Note:
+
+* $\tau$ is market error
+* $\rho$ is overround
+* $c$ is commission
+
 All allocations certified optimal: worst KKT residual 4e-12.
 
 **Reading:** D(p‖q) is exact whenever cash is never optimal (full investment, or a fair /

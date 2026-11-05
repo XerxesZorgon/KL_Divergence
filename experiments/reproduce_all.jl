@@ -4,7 +4,7 @@
 #
 # Each script is loaded into a fresh module and called through `invokelatest` (Julia 1.12 world-age rules).
 #
-# 1. Deletes experiments/output/ and runs E1–E7 at full size into it (each experiment also refreshes its figure in ../img/).
+# 1. Deletes experiments/output/ and runs E1–E8 at full size into it (each experiment also refreshes its figure in ../img/).
 #    An experiment that throws is marked ERROR and the rest still run.
 # 2. Compares every output file with experiments/reference/ (compare.jl): byte-identical when KELLY_KL_REFERENCE_HOST=1,
 #    otherwise within relative 1e-12. `*_meta.toml` files (versions, commit, wall time) are not compared.
@@ -16,7 +16,8 @@ using Kelly_KL, Printf, TOML
 include(joinpath(@__DIR__, "compare.jl"))
 
 const EXPERIMENT_FILES = [("E2", "e2_logscore.jl"), ("E3", "e3_bma.jl"), ("E4", "e4_cliff_drawdown.jl"),
-                          ("E5", "e5_min_stake_ruin.jl"), ("E6", "e6_sample_size.jl"), ("E7", "e7_robust.jl")]
+                          ("E5", "e5_min_stake_ruin.jl"), ("E6", "e6_sample_size.jl"), ("E7", "e7_robust.jl"),
+                          ("E8", "e8_demere.jl")]
 
 function load_script(file)
     mod = Module(Symbol(splitext(file)[1]))

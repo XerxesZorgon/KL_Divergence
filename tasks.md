@@ -3155,3 +3155,128 @@ Then tag: `git tag -a v0.1.0 -m "Kelly_KL v0.1.0 — Definition of Done met (Tas
 `TASK 056 FAILED — [which of 1–5] — [failing testset / test / file and message] — [error text]`
 
 **M8 complete — project v0.1.0 shipped (2026-11-04).** Gate met: Definition of Done met (Tasks 001–056). Next: John's final review; then the article (Extended Kelly II) is drafted from `OUTLINE.md` with every number traced to `experiments/reference/`.
+
+---
+
+# Post-release — article support (read-only checks)
+
+## Task 057: Report E1 parameter meanings and multiplicative-update cross-check scope
+**Status:** [x] Done (2026-11-04)
+**Milestone:** post-v0.1.0 (article)
+**Depends on:** 056
+**Result:** Q1 `sigma` = log-normal belief noise via `tilt` (e1_kl_growth_loss.jl:38, 52, 83-87, 112); Q2 `τ` = market error, `ρ` = overround, `c` = commission, `ρ` is not correlation (e1_kl_growth_loss.jl:5-7, 22-25, 112-113, 119-122); Q3 multiplicative-update stall was trial 17 107 of a 20 000-trial exploratory run before the switch to the exact greedy solver (ADR-004); the 50 000-trial stress test used the greedy solver (E1_RESULTS.md:15, 52-55; test_crosscheck.jl:20-31). No files modified; PASS.
+
+### What to do
+Read `code/experiments/e1_kl_growth_loss.jl` and `code/experiments/E1_RESULTS.md`. Change nothing. Answer, each with `file:line` citations: (Q1) what `sigma` controls and how it is applied; (Q2) what `τ`, `ρ` and `c` control in the stress test, and whether `ρ` makes outcomes correlated; (Q3) how many trials Cover's multiplicative-update cross-check ran on, and why `E1_RESULTS.md` says "1 / 20 000" when the stress test has 50 000 trials.
+
+### Files touched
+- none (read-only: `code/experiments/e1_kl_growth_loss.jl`, `code/experiments/E1_RESULTS.md`)
+
+### Acceptance Criterion
+The report answers Q1, Q2 and Q3, each with at least one `file:line` citation, and `git status` shows no modified files.
+
+### On Failure
+`TASK 057 FAILED — [criterion] — [observed] — [error text]`
+
+## Task 058: E8 — exact comparison of plug-in, shrunken, half-Kelly and Bayesian bets on a binary bet
+**Status:** [x] Done (2026-11-05) — PASS; P1 margin −6.5e-19, P2 margin +3.56e-4, P3 MC 5.6975e-3 vs exact 5.6962e-3 (SE 3.8e-6); 159 rows. Superseded by 058a before freezing.
+**Milestone:** post-v0.1.0 (article §4)
+**Depends on:** 057
+
+### What to do
+Create `code/experiments/e8_demere.jl`, following the structure of `e2_logscore.jl` (include `plotting.jl`; use `write_csv`, `write_meta`; `main(; seed = 2008, out_dir = ...)`; run guard at the bottom). No plot. Everything is computed exactly except check P3.
+
+Setting: one binary bet at even odds (fractional odds b = 1). The bettor sees x wins in n training trials, x ~ Binomial(n, p), stakes a fraction f of wealth, and earns expected log growth g(f, p) = p·log(1+f) + (1−p)·log(1−f) per bet. Kelly stake s(q) = max((q(b+1) − 1)/b, 0). Every rule's stake is capped at 0.99.
+
+Rules (stake as a function of x, n):
+- `oracle`: s(p) (knows p)
+- `kelly`: s(p̂), p̂ = x/n
+- `bm`: k·s(p̂), k = s(p̂)² / (s(p̂)² + ((b+1)/b)²·σ²), σ² = p̂(1−p̂)/n; k = 0 when s(p̂) = 0 (Baker & McHale 2013, Eq. 5, plug-in)
+- `half`: 0.5·s(p̂)
+- `bayes_A`: s((x + A)/(n + 2A)), the posterior-mean bet under a Beta(A, A) prior
+
+Part A (fixed truth): p ∈ {0.52, 0.55, 0.57, 0.60, 0.65}, n ∈ {40, 100, 400}; rules oracle, kelly, bm, half, bayes_1, bayes_10, bayes_50. Growth = Σ_x Binom(x | n, p)·g(f(x), p); compute the pmf in log space (recursion from log pmf(0) = n·log1p(−p)).
+
+Part B (truth drawn from a prior): p ~ Beta(A, A), A ∈ {1, 10, 50}, same n; rules oracle, kelly, bm, half, bayes_1, bayes_matched (= bayes_A). For every rule except oracle use the exact form: growth = Σ_x BB(x)·[m(x)·log(1+f(x)) + (1−m(x))·log(1−f(x))], where BB is the beta-binomial pmf (log-space recursion: log BB(0) = Σ_{j=0}^{n−1} log((A+j)/(2A+j)); BB(x+1)/BB(x) = (n−x)/(x+1)·(x+A)/(n−x−1+A)) and m(x) = (x+A)/(n+2A). For oracle, integrate g(s(p), p) against the Beta(A, A) density with a 100 000-point midpoint grid on (0, 1), weights normalized in log space.
+
+Checks:
+- P1: in every Part B cell, bayes_matched ≥ every other non-oracle rule − 1e-12.
+- P2: in every cell of both parts, oracle ≥ every other rule − 1e-9.
+- P3: Monte Carlo cross-check of Part A, p = 0.57, n = 40, rule `half`: 10^6 draws of x (StableRNG(2008), x as a sum of n Bernoulli draws); |MC mean − exact| ≤ 3·SE.
+
+Outputs: `experiments/output/e8_demere.csv` with columns `part,truth,n,rule,growth` (truth as `p=0.57` or `Beta(10,10)`; growth in nats per bet, `%.12e`) and `experiments/output/e8_meta.toml` (seed, wall_seconds, P1/P2/P3 results, pass). Print one line per check and a final `E8: PASS` or `E8: FAIL`.
+
+### Files touched
+- `code/experiments/e8_demere.jl` — create
+- Do not touch `src/`, `test/`, `experiments/reference/`, `experiments/reproduce_all.jl`, `Project.toml`, `Manifest.toml`. Use only Base, Random, Statistics, Printf, StableRNGs and Kelly_KL helpers already used by e2/e3; no new dependencies.
+
+### Acceptance Criterion
+`julia --project=. experiments/e8_demere.jl` prints `E8: PASS`, and `experiments/output/e8_demere.csv` has 3 × 5 × 7 + 3 × 3 × 6 = 159 data rows.
+
+### On Failure
+`TASK 058 FAILED — [criterion] — [observed] — [error text]`
+
+## Task 058a: E8 — extend to Baker & McHale's sample sizes, add exact binomial shrinkage and the fractional-Kelly identity check
+**Status:** [x] Done (2026-11-05) — PASS; P4 max diff 2.2e-16; 305 rows. Two defects found in review, fixed by 058b before freezing.
+**Milestone:** post-v0.1.0 (article §4)
+**Depends on:** 058
+
+### What to do
+Edit `code/experiments/e8_demere.jl` (Task 058) with exactly these changes:
+1. Part A truths: p ∈ {0.52, 0.55, 0.57, 1 − (5/6)^5, 0.65} (replace 0.60 by 1 − (5/6)^5 = 0.598122…, the de Méré-style bet of Baker & McHale 2013 §5.1; label it `p=0.598122`).
+2. Training sizes in both parts: n ∈ {8, 20, 40, 100, 400}.
+3. New rule `bm_binom` in both parts (B&M "binomial shrinkage"): for each x with p̂ = x/n, if s(p̂) = 0 the stake is 0; otherwise k̂ = argmax over k ∈ [0, 1] of Σ_{x′=0}^{n} Binom(x′ | n, p̂)·g(min(k·s(x′/n), 0.99), p̂) (golden-section search, tolerance 1e-10), and the stake is min(k̂·s(p̂), 0.99). Precompute k̂ per (n, x); it does not depend on the truth.
+4. New check P4: for every n and A ∈ {1, 10, 50} and every x = 0..n, the `bayes_A` stake equals min(0.99, n/(n + 2A)·max(2x/n − 1, 0)) within 1e-15 (posterior-mean bet = fractional Kelly with fraction n/(n + 2A) at even odds).
+P1–P3 unchanged (P1 now also compares against `bm_binom`). Rule order in the CSV: oracle, kelly, bm, bm_binom, half, bayes_1, bayes_10, bayes_50 (Part A); oracle, kelly, bm, bm_binom, half, bayes_1, bayes_matched (Part B).
+
+### Files touched
+- `code/experiments/e8_demere.jl` — edit
+- Do not touch anything listed as off-limits in Task 058.
+
+### Acceptance Criterion
+`julia --project=. experiments/e8_demere.jl` prints `E8: PASS` with P1–P4 all passing, and `experiments/output/e8_demere.csv` has 5 × 5 × 8 + 3 × 5 × 7 = 305 data rows.
+
+### On Failure
+`TASK 058a FAILED — [criterion] — [observed] — [error text]`
+
+## Task 058b: E8 — fix CSV labels with commas and cap only the final stake
+**Status:** [x] Done (2026-11-05) — PASS; P1–P5 pass; P5 max diff 6.9e-18; 305 rows, 5 fields per row.
+**Milestone:** post-v0.1.0 (article §4)
+**Depends on:** 058a
+
+### What to do
+Edit `code/experiments/e8_demere.jl`:
+1. Part B truth labels contain a comma (`Beta(10,10)`) and `write_csv` does not quote, so those rows parse as 6 fields. Change the label to `Beta(A=10)` (and `Beta(A=1)`, `Beta(A=50)`). Do not change `plotting.jl`.
+2. Apply the 0.99 cap once, to each rule's final stake: stake = min(rule's uncapped stake, 0.99), where the uncapped stakes are s(p) for oracle, s(p̂) for kelly, k·s(p̂) for bm, k̂·s(p̂) for bm_binom, 0.5·s(p̂) for half, s(m) for the Bayes rules, and s(q) = max((q(b+1) − 1)/b, 0) is not capped. (Currently half-Kelly halves an already-capped s(p̂), so at x = n it stakes 0.495 instead of 0.5.) Inside the bm_binom objective use min(k·s(x′/n), 0.99) as now.
+3. New check P5: `half` growth equals `bayes_10` growth at n = 20 (Part A, every p) and `bayes_50` growth at n = 100 (Part A, every p), and equals `bayes_matched` growth for Beta(A=10) at n = 20 and Beta(A=50) at n = 100 (Part B), each within 1e-15.
+
+### Files touched
+- `code/experiments/e8_demere.jl` — edit
+- Do not touch anything listed as off-limits in Task 058.
+
+### Acceptance Criterion
+`julia --project=. experiments/e8_demere.jl` prints `E8: PASS` with P1–P5 all passing, `experiments/output/e8_demere.csv` has 305 data rows, and every row has exactly 5 comma-separated fields.
+
+### On Failure
+`TASK 058b FAILED — [criterion] — [observed] — [error text]`
+
+## Task 059: Add E8 to reproduce_all and freeze its reference output
+**Status:** [x] Done (2026-11-05)
+**Milestone:** post-v0.1.0 (article §4)
+**Depends on:** 058b
+**Result:** 22 outputs byte-identical in 13.7 min (819 s); .gitattributes unchanged; PASS.
+
+### What to do
+Add `e8_demere.jl` to `code/experiments/reproduce_all.jl` in the same way as E2–E7, and copy `experiments/output/e8_demere.csv` to `experiments/reference/e8_demere.csv` (byte-compared; `.gitattributes -text` must cover it). Update `.gitattributes` only if the existing pattern does not already cover the new file.
+
+### Files touched
+- `code/experiments/reproduce_all.jl` — edit
+- `code/experiments/reference/e8_demere.csv` — create
+- `.gitattributes` — edit only if needed
+
+### Acceptance Criterion
+`julia --project=. experiments/reproduce_all.jl` reports every previous output plus `e8_demere.csv` byte-identical to `experiments/reference/`, with no failures.
+
+### On Failure
+`TASK 059 FAILED — [criterion] — [observed] — [error text]`
+
