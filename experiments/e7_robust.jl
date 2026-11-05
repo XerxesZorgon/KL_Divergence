@@ -63,6 +63,7 @@ function main(; seed = 2007, out_dir = joinpath(@__DIR__, "output"), quick = fal
     for (nm, a, wc, ε, cert) in bettors
         @printf("E7: %-13s ε = %.5f, a = (cash %.4f, A %.4f, B %.4f), worst-case growth %+.5f, certificate %s\n",
                 nm, ε, a[1], a[2], a[3], wc, cert)
+        csv_nm = replace(nm, "KL, n = " => "KL n=")
         for q in qs
             t = truth(q); g = growth(t, a)
             sim = simulate_ruin(t, a; rng, trials, rounds = 1_000)
@@ -70,7 +71,7 @@ function main(; seed = 2007, out_dir = joinpath(@__DIR__, "output"), quick = fal
             inside = startswith(nm, "W") ? q ≤ 0.01 : (startswith(nm, "KL") ? q == 0 : false)
             ok = !inside || g ≥ wc - 1e-9
             pass &= ok
-            push!(rows, (nm, ε, a[1], a[2], a[3], wc, q, g, half, sim.final_q[2], inside, ok))
+            push!(rows, (csv_nm, ε, a[1], a[2], a[3], wc, q, g, half, sim.final_q[2], inside, ok))
             @printf("E7:   q = %.3f: growth %+.5f, Pr(halved) %.3f, median final wealth %.3g%s\n", q, g, half, sim.final_q[2],
                     inside ? (ok ? "  [guarantee holds]" : "  [GUARANTEE VIOLATED]") : "")
         end

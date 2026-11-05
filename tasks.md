@@ -3321,3 +3321,26 @@ In `code/experiments/e7_robust.jl`, after the existing line that computes `D_cas
 ### On Failure
 `TASK 061 FAILED — [criterion] — [observed] — [error text]`
 
+## Task 062: Make every reference CSV well-formed (no unquoted commas in label fields)
+**Status:** [x] Done (2026-11-05)
+**Milestone:** post-v0.1.0 (article)
+**Depends on:** 061
+
+### What to do
+`write_csv` (experiments/plotting.jl) does not quote fields, so a label containing a comma splits into two fields. Known case: `reference/e7_table.csv`, bettor labels `KL, n = 200`, `KL, n = 1000`, `KL, n = 5000` (13 fields on those rows, header has 12).
+1. Audit: for every `.csv` in `code/experiments/reference/`, check that every row has the same number of comma-separated fields as its header. List each file that fails, with its generating script.
+2. Fix each failing file at the source, in its generating script only: write a comma-free label in the CSV column (for E7: `KL n=200`, `KL n=1000`, `KL n=5000`; keep `Kelly (model)`, `W-L1`, `W-L∞`). Do not change the display names used in plot legends or printed output, so every `.svg` stays byte-identical. Do not change `write_csv` or `plotting.jl`.
+3. Regenerate and copy only the fixed CSVs into `experiments/reference/`. No other reference file may change.
+
+### Files touched
+- `code/experiments/e7_robust.jl` — edit (CSV label only)
+- any other generating script found in step 1 — edit (CSV label only)
+- the corresponding `code/experiments/reference/*.csv` — replace
+- Do not touch `src/`, `test/`, `plotting.jl`, any `.svg`, `Project.toml`, `Manifest.toml`, or any third-party file. No scratch files inside the repository.
+
+### Acceptance Criterion
+Every `.csv` in `experiments/reference/` has a constant field count equal to its header's, and `julia --project=. experiments/reproduce_all.jl` with `KELLY_KL_REFERENCE_HOST=1` ends with `reproduce_all: PASS — 8 experiments, 23 files`.
+
+### On Failure
+`TASK 062 FAILED — [criterion] — [observed] — [error text]`
+
