@@ -3280,3 +3280,44 @@ Add `e8_demere.jl` to `code/experiments/reproduce_all.jl` in the same way as E2�
 ### On Failure
 `TASK 059 FAILED — [criterion] — [observed] — [error text]`
 
+## Task 060: Report the source of E7's cash radius and the Wasserstein radius definition
+**Status:** [x] Done (2026-11-05) — PASS. Cash radius = `kl_cash_radius(m)[1]` = 0.012935178620366382 (e7_robust.jl:56, src/robust.jl:79-114), printed to stdout only. W radii = 0.01 × E_Π[C(s, crash)] (1% crash mass; L1 → 0.0125, L∞ → 0.00825; e7_robust.jl:10-12, 51-52; src/robust.jl:211-214). KL radius = quantile(χ²₃, 0.95)/(2n) (src/robust.jl:378-383).
+**Milestone:** post-v0.1.0 (article §6)
+**Depends on:** 059
+
+### What to do
+Read `code/experiments/e7_robust.jl`, `code/experiments/reference/e7_table.csv`, `code/experiments/reference/e7_kl_coverage.csv`, and any `src/` function those call for radii or cash radii (search `src/` for `cash_radius`, `kl_radius_chi2`, `wasserstein`). Change nothing. Answer, each with `file:line` citations:
+(Q1) The E7 market: outcomes, payoffs, the crash outcome and its probability q, the bookmaker/market prices, and whether cash is allowed.
+(Q2) Is the value 0.0129 ("cash radius", the KL radius at which the robust bet becomes all cash) computed anywhere in the code or written to any file in `experiments/reference/` or `experiments/output/`? If yes: which function, which inputs (which n, which nominal distribution P), and the exact printed value. If no: say so, and report what the code does compute that is closest (e.g. a cash radius for another distribution).
+(Q3) How are the Wasserstein radii in `e7_table.csv` (W-L1 0.0125, W-L∞ 0.00825) set? Give the formula or constant, the ground metric (distance between outcomes) for each of L1 and L∞, and whether either radius is defined as "1% of crash mass" or something else.
+(Q4) For the KL rows: how is the radius set (`kl_radius_chi2`? confidence level? degrees of freedom?), and what are the radii at n = 50, 200, 1 000 and 5 000 if they are printed or written anywhere.
+
+### Files touched
+- none (read-only)
+
+### Acceptance Criterion
+The report answers Q1–Q4, each with at least one `file:line` citation, and `git status` shows no modified files.
+
+### On Failure
+`TASK 060 FAILED — [criterion] — [observed] — [error text]`
+
+## Task 061: Write E7's KL cash radius to a reference file
+**Status:** [x] Done (2026-11-05)
+**Milestone:** post-v0.1.0 (article §6)
+**Depends on:** 060
+**Result:** reproduce_all: PASS — 8 experiments, 23 files, 15.2 min; reference/e7_cash_radius.csv written; PASS.
+
+### What to do
+In `code/experiments/e7_robust.jl`, after the existing line that computes `D_cash = kl_cash_radius(m)[1]` (line 56), write `experiments/output/e7_cash_radius.csv` with the existing `write_csv` helper: header `quantity,value`, one row `kl_cash_radius,<D_cash>` in the same `%.12e` style as the other E7 CSVs. If `kl_cash_radius` also returns the minimizing distribution Q (check its return value in `src/robust.jl:79-114`), add one row per scenario, `q_min_s<i>,<value>`; otherwise write only the one row. Do not change any computation, RNG call or ordering that affects the other E7 outputs. Then copy the new file to `experiments/reference/e7_cash_radius.csv`.
+
+### Files touched
+- `code/experiments/e7_robust.jl` — edit (add the write only)
+- `code/experiments/reference/e7_cash_radius.csv` — create
+- Do not touch any other file in `experiments/reference/`, `src/`, `test/`, `Project.toml`, `Manifest.toml`.
+
+### Acceptance Criterion
+`julia --project=. experiments/reproduce_all.jl` with `KELLY_KL_REFERENCE_HOST=1` ends with `reproduce_all: PASS — 8 experiments, 23 files`, and `reference/e7_cash_radius.csv` contains `kl_cash_radius,1.293517862037e-02`.
+
+### On Failure
+`TASK 061 FAILED — [criterion] — [observed] — [error text]`
+

@@ -53,7 +53,9 @@ function main(; seed = 2007, out_dir = joinpath(@__DIR__, "output"), quick = fal
         r = wasserstein_robust_allocation(m, ε; unseen = Xc, cost)
         push!(bettors, (nm, r.a, r.worst_case_growth, ε, r.certificate))
     end
-    D_cash = kl_cash_radius(m)[1]
+    (D_cash, Q_cash) = kl_cash_radius(m)
+    cash_rows = vcat([("kl_cash_radius", D_cash)], [("q_min_s$s", Q_cash[s]) for s in eachindex(Q_cash)])
+    write_csv(joinpath(out_dir, "e7_cash_radius.csv"), ["quantity", "value"], cash_rows)
     @printf("E7: KL cash radius of the model = %.5f (a KL ball at least this large makes the robust bet all cash)\n", D_cash)
 
     # (a) the table
