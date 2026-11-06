@@ -3344,3 +3344,24 @@ Every `.csv` in `experiments/reference/` has a constant field count equal to its
 ### On Failure
 `TASK 062 FAILED — [criterion] — [observed] — [error text]`
 
+## Task 063: Relabel the E7 crash probability as η in Figure 5, and guard reference CSVs against malformed rows
+**Status:** [x] Done (2026-11-05)
+**Milestone:** post-v0.1.0 (article)
+**Depends on:** 062
+
+### What to do
+1. In `code/experiments/e7_robust.jl`, change the figure's `xlabel` from `"Probability q of the unseen crash"` to `"Probability η of the unseen crash"`. Change nothing else in the script (CSV column names such as `q_crash`, variable names, legends, printed output and all computations stay as they are). Regenerate E7 and copy the new `e7_robust.svg` into `experiments/reference/`; the script already copies it to the article's `img/` folder.
+2. In `code/experiments/compare.jl` (the byte comparison used by `reproduce_all.jl`), add a check that runs on every `.csv` in `experiments/reference/` and on its regenerated counterpart: each row must have the same number of comma-separated fields as the header. A failure must make `reproduce_all` report FAIL and name the file and first bad line. Do not change how the byte comparison itself works.
+
+### Files touched
+- `code/experiments/e7_robust.jl` — edit (`xlabel` only)
+- `code/experiments/reference/e7_robust.svg` — replace
+- `code/experiments/compare.jl` — edit (add the field-count check)
+- Do not touch any other file in `experiments/reference/`, `src/`, `test/`, `plotting.jl`, `Project.toml`, `Manifest.toml`, or any third-party file. No scratch files inside the repository.
+
+### Acceptance Criterion
+`julia --project=. experiments/reproduce_all.jl` with `KELLY_KL_REFERENCE_HOST=1` ends with `reproduce_all: PASS — 8 experiments, 23 files`; `reference/e7_robust.svg` contains `Probability η of the unseen crash` and not `Probability q`; and a deliberately malformed copy of one CSV (made in a temporary directory outside the repository) is reported as a field-count failure by the new check.
+
+### On Failure
+`TASK 063 FAILED — [criterion] — [observed] — [error text]`
+

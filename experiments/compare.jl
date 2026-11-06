@@ -36,6 +36,22 @@ function first_difference(a::AbstractString, b::AbstractString)
     return "files differ"
 end
 
+function check_csv_fields(path::AbstractString)
+    endswith(path, ".csv") || return (true, "")
+    isfile(path) || return (true, "")
+    lines = readlines(path)
+    isempty(lines) && return (true, "")
+    expected = length(split(lines[1], ','))
+    for (i, line) in enumerate(lines)
+        isempty(strip(line)) && continue
+        n = length(split(line, ','))
+        if n != expected
+            return (false, "malformed CSV ($(basename(path))): line $i has $n fields (expected $expected)")
+        end
+    end
+    return (true, "")
+end
+
 """
     compare_file(ref, out; exact) -> (ok::Bool, detail::String)
 
@@ -43,6 +59,10 @@ Compare one output file with its reference (see the header for the two modes).
 """
 function compare_file(ref::AbstractString, out::AbstractString; exact::Bool)
     isfile(out) || return (false, "missing output")
+    ok_ref, msg_ref = check_csv_fields(ref)
+    ok_ref || return (false, msg_ref)
+    ok_out, msg_out = check_csv_fields(out)
+    ok_out || return (false, msg_out)
     rb, ob = read(ref), read(out)
     rb == ob && return (true, "identical")
     rs, os = String(rb), String(ob)

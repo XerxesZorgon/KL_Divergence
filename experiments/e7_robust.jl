@@ -89,7 +89,7 @@ function main(; seed = 2007, out_dir = joinpath(@__DIR__, "output"), quick = fal
     end
     svg = svg_plot(joinpath(out_dir, "e7_robust.svg"); series,
         xlim = (0.0, 0.03), ylim = (-6.0, 14.0), xticks = collect(0.0:0.01:0.03), yticks = collect(-6.0:2.0:14.0),
-        xlabel = "Probability q of the unseen crash", ylabel = "Growth per period under the truth (×10⁻³ nats)",
+        xlabel = "Probability η of the unseen crash", ylabel = "Growth per period under the truth (×10⁻³ nats)",
         hlines = [(0.0, "")], vlines = [(0.01, "W radius")], legend_title = "E7: robust bets")
 
     # (c) KL-radius coverage
