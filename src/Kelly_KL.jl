@@ -26,6 +26,7 @@ const MAX_SAMPLED_SCENARIOS = 1_048_576
 const VALID_STRUCTURES = (:single_event, :simultaneous, :correlated, :sampled, :mixture)
 
 include("model.jl")
+include("box.jl")
 include("certify.jl")
 include("exact.jl")
 include("conic.jl")
