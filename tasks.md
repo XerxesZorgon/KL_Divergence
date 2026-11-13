@@ -3530,7 +3530,7 @@ Error: <full output>
 
 ## Task 070: `optimal_allocation(...; upper)`, conic dispatch on any finite cap; near-point shortcut (ADR-016)
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 069
+**Status:** [x] Done (2026-11-13, commit 52dc126; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 069
 
 ### What to do
 
@@ -3557,7 +3557,7 @@ Error: <full output>
 
 ## Task 071: Oracle generator and committed fixtures (ADR-014) — run by hand, no library code; two commits: (1) frozen `requirements.txt`, (2) generator + fixtures
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 070
+**Status:** [x] Done (2026-11-13, commits 632526c 4f5d10a 683e102; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 070
 
 ### What to do
 

@@ -25,6 +25,7 @@ LinearAlgebra = "1.12.0"
 MathOptInterface = "1.54.0"
 Printf = "1.11.0"
 Random = "1.11.0"
+SHA = "0.7.0"
 SCS = "2.7.1"
 StableRNGs = "1.1.0"
 Statistics = "1.11.5"
@@ -34,7 +35,8 @@ julia = "1.12"
 
 [extras]
 Aqua = "4c88cf16-eb10-579e-8560-4a9242c79595"
+SHA = "ea8e919c-243c-51af-8825-aaa63cd721ce"
 Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
-test = ["Aqua", "Test"]
+test = ["Aqua", "SHA", "Test"]

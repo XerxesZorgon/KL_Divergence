@@ -50,8 +50,8 @@ fixture files under `test/oracle/` that are committed to git; Julia tests only r
 
 | Case | Compared | Tolerance |
 |---|---|---|
-| allocation, non-degenerate | growth; allocation (∞-norm); ν*; sets U/Z/F | ≤ 1e-10; ≤ 1e-8; ≤ 1e-8; library sets (τ_a) equal the stored sets (τ_o) |
-| allocation, degenerate | growth only (ADR-004 consequence: allocations may differ) | ≤ 1e-10 |
+| allocation, non-degenerate | growth; allocation (∞-norm); ν*; sets U/Z/F | ≤ 1e-10 + 3·ρ_u(oracle); ≤ 1e-8; ≤ 1e-8; library sets (τ_a) equal the stored sets (τ_o) |
+| allocation, degenerate | growth only (ADR-004 consequence: allocations may differ) | ≤ 1e-10 + 3·ρ_u(oracle) |
 | kl | worst-case growth (rule iii) | ≤ 1e-7 (as T-ORC-4); a and λ reported, not tested |
 
    The set comparison catches a polish that converges to the wrong active set, which a 1e-8 allocation
@@ -94,3 +94,6 @@ fixture files under `test/oracle/` that are committed to git; Julia tests only r
 | 2026-11-13 | `generate_box_oracle.py` (seed 71; Python 3.14.10, cvxpy 1.9.3, clarabel 0.11.1) | allocation 200, kl 100 | allocation 7, kl 4 | allocation 3.5%, kl 4.0% | accepted: 193 allocation + 96 kl = 289 cases. Redrawn (not counted as attempted): allocation 18 (no cap could be built: no bet with uncapped stake > 0.03, or no-cash n = 1), 0 non-binding; kl 16 (no cap could be built) + 83 (all-cash, λ ≤ 1e-9 or no binding cap). Degenerate at margin 1e-6: 0 allocation, 0 kl. Largest stored ρ_u 9.3e-9. Some solves returned `optimal_inaccurate` and were kept only if they passed the ρ_u rule. `requirements_sha256` 667ae44c1c34… |
 
 Task 071 (PLAN.md M9) appends the row for the committed fixtures.
+
+## Amendment 2026-11-13 (Task 072)
+Growth comparison is case-specific. An accepted oracle point may have ρ_u up to 1e-8, including |Σa − 1|; uninvested or over-invested stake changes growth at first order (≈ |Σa − 1|·ν). The library is certified at 1e-10 (growth within ≈ 2e-10 of the optimum, ADR-013), so |G_lib − G_oracle| ≤ 1e-10 + 3·ρ_u(oracle). Found on alloc-135: oracle Σa = 1 − 1.2e-10, ρ_u = 1.17e-10, library growth higher by 1.93e-10. Two-sided, so a library result suspiciously better than the oracle is still caught.

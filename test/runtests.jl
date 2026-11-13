@@ -12,6 +12,8 @@ const QUICK = get(ENV, "KELLY_KL_QUICK", "0") == "1"
     include("test_model.jl")
     include("test_constructors.jl")
     include("test_box.jl")
+    include("oracle_reader.jl")
+    include("test_box_oracle.jl")
     include("test_certify.jl")
     include("test_exact.jl")
     include("test_conic_raw.jl")
