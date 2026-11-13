@@ -26,3 +26,30 @@ function _normalize_upper(m::ScenarioModel, upper)::Union{Nothing, Vector{Float6
     return u
 end
 
+
+"""
+    _project_capped(x::AbstractVector{<:Real}, u::Vector{Float64}) -> Vector{Float64}
+
+Euclidean projection of `x` onto A_u = {a : 0 ≤ a_j ≤ u_j, Σ a_j = 1} (`Inf` = uncapped). Precondition: `u` comes from
+`_normalize_upper` (not `nothing`) and `sum(u) ≥ 1`; not re-validated. Internal; not exported.
+
+The result is `clamp.(x .- θ, 0, u)` with θ the root of the non-increasing piecewise-linear `S(θ) = Σ clamp(x_j - θ, 0, u_j)`
+`= 1`, found exactly by evaluating `S` at the sorted breakpoints and interpolating linearly inside the bracketing interval.
+"""
+function _project_capped(x::AbstractVector{<:Real}, u::Vector{Float64})::Vector{Float64}
+    xf = Vector{Float64}(x)
+    S(θ) = sum(clamp.(xf .- θ, 0.0, u))
+    bp = sort!(vcat(xf, [xf[j] - u[j] for j in eachindex(u) if isfinite(u[j])]))
+    s = S.(bp)
+    θ = if s[1] < 1
+        # root lies left of every breakpoint, where only uncapped assets move (slope -n_inf)
+        bp[1] - (1 - s[1]) / count(isinf, u)
+    else
+        k = findlast(≥(1), s)               # s non-increasing; s[end] = 0 < 1 so k < length(bp)
+        s[k] == 1 ? bp[k] : bp[k] + (s[k] - 1) * (bp[k + 1] - bp[k]) / (s[k] - s[k + 1])
+    end
+    a = clamp.(xf .- θ, 0.0, u)
+    F = findall(j -> 0 < a[j] < u[j], eachindex(a))
+    isempty(F) || (a[F] .+= (1 - sum(a)) / length(F))
+    return a
+end

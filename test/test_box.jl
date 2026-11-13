@@ -1,3 +1,5 @@
+using StableRNGs, Random
+
 @testset "T-BOX-8 validation (Task 064)" begin
     nu = Kelly_KL._normalize_upper
     mc = single_event([0.6, 0.4], [2.0, 2.5]; cash = true)           # J = 3
@@ -27,3 +29,32 @@
     @test nu(mc, nothing) === nothing
 end
 
+
+@testset "T-BOX-11 projection (Task 065)" begin
+    rng = StableRNG(65)
+    for _ in 1:1000
+        J = rand(rng, 2:8)
+        x = 2 .* randn(rng, J)
+        u = Float64[]
+        while true
+            u = [rand(rng) < 0.5 ? Inf : 0.05 + 0.95 * rand(rng) for _ in 1:J]
+            sum(u) ≥ 1.05 && break
+        end
+        a = Kelly_KL._project_capped(x, u)
+        # (1) feasibility
+        @test all(a .≥ 0)
+        @test all(a .≤ u)
+        @test abs(sum(a) - 1) ≤ 1e-15
+        # (2) idempotence
+        @test maximum(abs.(Kelly_KL._project_capped(a, u) .- a)) ≤ 1e-15
+        # (3) independent bisection
+        f(θ) = sum(clamp.(x .- θ, 0.0, u)) - 1
+        lo, hi = minimum(x) - 1, maximum(x)
+        for _ in 1:200
+            mid = (lo + hi) / 2
+            f(mid) > 0 ? (lo = mid) : (hi = mid)
+        end
+        θb = (lo + hi) / 2
+        @test maximum(abs.(a .- clamp.(x .- θb, 0.0, u))) ≤ 1e-12
+    end
+end
