@@ -1,3 +1,5 @@
 # Reference and golden outputs are compared byte-for-byte: never convert their line endings (Task 055, ADR-009).
 experiments/reference/** -text
 test/golden/** -text
+test/oracle/requirements.txt -text
+test/oracle/box_oracle.toml -text

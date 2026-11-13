@@ -8,3 +8,4 @@ __pycache__/
 *.jl.mem
 LocalPreferences.toml
 python/*.egg-info/
+test/oracle/.venv/
