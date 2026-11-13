@@ -3365,3 +3365,434 @@ Every `.csv` in `experiments/reference/` has a constant field count equal to its
 ### On Failure
 `TASK 063 FAILED — [criterion] — [observed] — [error text]`
 
+# M9 — v0.2.0: per-asset upper bounds (ADR-012…016)
+
+Source: docs/PLAN.md M9 (gate met 2026-11-11). Authorship rule: no Gemini-authored commits; every commit message ends with `Agent:` and `Model:` lines. One task per Antigravity instruction, in order.
+
+## Task 064: Cap validation and normalization (internal helper); feasibility threshold Σu_j < 1 − 1e-12 (ADR-013)
+
+**Status:** [x] Done (2026-11-11, commit e2a6b61) **Milestone:** M9 **Depends on:** M8 (tag v0.1.0)
+
+### What to do
+
+Cap validation and normalization (internal helper); feasibility threshold Σu_j < 1 − 1e-12 (ADR-013). Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- new `src/box.jl`
+- `src/Kelly_KL.jl` (include)
+- `test/test_box.jl`
+- `test/runtests.jl` (include `test_box.jl`)
+
+### Acceptance Criterion
+
+T-BOX-8 (a)–(d) green and the validation part of T-BOX-8 (e) green (no throw; the shortcut part of (e) is checked in Task 070); caps ≥ 1 → `Inf`; all-`Inf` → `nothing` (unit test)
+
+### On Failure
+
+```
+TASK 064 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 065: Projection onto A_u
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 064
+
+### What to do
+
+Projection onto A_u. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `src/box.jl`
+- `test/test_box.jl`
+
+### Acceptance Criterion
+
+T-BOX-11 green (bisection characterization; no Python)
+
+### On Failure
+
+```
+TASK 065 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 066: Minimax residual (ADR-013): `kkt_residual(...; upper)` and internal `kkt_components` returning ν*
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 065
+
+### What to do
+
+Minimax residual (ADR-013): `kkt_residual(...; upper)` and internal `kkt_components` returning ν*. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `src/certify.jl`
+- `test/test_certify.jl`
+
+### Acceptance Criterion
+
+T-BOX-5 green (bitwise); T-BOX-12 green; T-BOX-3 (v) green; on the hand-built a = (0.9, 0.1) of T-BOX-1: ρ_u = 0 within 1e-15, ν* = 98/99 and r_bet = 12/11 within 1e-12
+
+### On Failure
+
+```
+TASK 066 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 067: `upper` field on `BetResult` / `RobustResult`; constructor keyword; certification hook recomputes with `result.upper`
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 066
+
+### What to do
+
+`upper` field on `BetResult` / `RobustResult`; constructor keyword; certification hook recomputes with `result.upper`. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `src/certify.jl`
+- `src/robust.jl` (struct only)
+- `test/certify_hook.jl`
+
+### Acceptance Criterion
+
+full `Pkg.test()` green with no caller passing caps (no behavior change)
+
+### On Failure
+
+```
+TASK 067 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 068: Caps in `solve_conic`
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 067
+
+### What to do
+
+Caps in `solve_conic`. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `src/conic.jl`
+- `test/test_conic_raw.jl`
+
+### Acceptance Criterion
+
+raw conic output lies in A_u (feasibility terms ≤ 1e-8) on 200 random capped problems; uncapped `test_conic_raw` results unchanged bitwise
+
+### On Failure
+
+```
+TASK 068 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 069: Caps in `polish_crra` / `polish_log_optimal` (fixed capped coordinates, upper ratio test, release rule, ν-based add rule, projection)
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 068
+
+### What to do
+
+Caps in `polish_crra` / `polish_log_optimal` (fixed capped coordinates, upper ratio test, release rule, ν-based add rule, projection). Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `src/polish.jl`
+- `test/test_polish.jl`
+
+### Acceptance Criterion
+
+T-BOX-10 green; existing `test_polish` results unchanged bitwise
+
+### On Failure
+
+```
+TASK 069 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 070: `optimal_allocation(...; upper)`, conic dispatch on any finite cap; near-point shortcut (ADR-016)
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 069
+
+### What to do
+
+`optimal_allocation(...; upper)`, conic dispatch on any finite cap; near-point shortcut (ADR-016). Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `src/optimize.jl`
+- `src/box.jl` (near-point test)
+- `test/test_optimize.jl`
+
+### Acceptance Criterion
+
+T-BOX-1 and T-BOX-4 green; T-BOX-16 (a), (c), (d) green; the solve part of T-BOX-8 (e) green (method == :single_point)
+
+### On Failure
+
+```
+TASK 070 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 071: Oracle generator and committed fixtures (ADR-014) — run by hand, no library code; two commits: (1) frozen `requirements.txt`, (2) generator + fixtures
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 070
+
+### What to do
+
+Oracle generator and committed fixtures (ADR-014) — run by hand, no library code; two commits: (1) frozen `requirements.txt`, (2) generator + fixtures. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- new `test/oracle/generate_box_oracle.py`
+- `test/oracle/requirements.txt` (`pip freeze` of the generator venv: Python 3.14.10, cvxpy 1.9.3, clarabel 0.11.1 and every transitive package pinned)
+- `test/oracle/box_oracle.toml`
+- `.gitignore` (generator venv)
+- `docs/adr/ADR-014` (rejection-log row)
+- `.gitattributes` (`test/oracle/requirements.txt -text` and `test/oracle/box_oracle.toml -text`)
+
+### Acceptance Criterion
+
+commit (1) adds only `test/oracle/requirements.txt` and precedes commit (2) in `git log`; the generator refuses to run while `requirements.txt` has uncommitted changes; fixture header `requirements_sha256` equals the SHA-256 of the committed file; KL cases pass ADR-014 rules (i)–(ii); generator exits 0 with rejection rate ≤ 10% per kind; fixture holds ≥ 180 of 200 attempted `allocation` cases and ≥ 90 of 100 attempted `kl` cases (TEST_PLAN T-BOX-2, T-BOX-7) with seed, versions, attempted/rejected counts in its header; ADR-014 rejection log has the new row; `Pkg.test()` unchanged and needs no Python; `.gitattributes` marks both files `-text` before commit (1)
+
+### On Failure
+
+```
+TASK 071 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 072: Fixture reader and oracle tests
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 071
+
+### What to do
+
+Fixture reader and oracle tests. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `test/oracle_reader.jl` (or inside `test/test_box.jl`)
+- `test/runtests.jl`
+- `Project.toml` (`[extras]`/`[targets]`: SHA stdlib, test only)
+
+### Acceptance Criterion
+
+T-BOX-2, T-BOX-3 (i)–(iv) and T-BOX-15 green
+
+### On Failure
+
+```
+TASK 072 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 073: `kl_cash_radius(...; upper)` (validation only)
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 072
+
+### What to do
+
+`kl_cash_radius(...; upper)` (validation only). Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `src/robust.jl`
+- `test/test_robust.jl`
+
+### Acceptance Criterion
+
+first clause of T-BOX-6 green (`===` equality)
+
+### On Failure
+
+```
+TASK 073 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 074: Caps in `kl_robust_conic` and `kl_robust_allocation` (ε = 0 path, cash path, λ search, saddle certificate with minimax ρ_u)
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 073
+
+### What to do
+
+Caps in `kl_robust_conic` and `kl_robust_allocation` (ε = 0 path, cash path, λ search, saddle certificate with minimax ρ_u). Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `src/robust.jl`
+- `test/test_robust.jl`
+
+### Acceptance Criterion
+
+T-BOX-7 (against the `kl` fixtures, ADR-014 rule iii), remaining clauses of T-BOX-6, and T-BOX-16 (b) green
+
+### On Failure
+
+```
+TASK 074 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 075: Wasserstein rejects caps
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 074
+
+### What to do
+
+Wasserstein rejects caps. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `src/robust.jl`
+- `test/test_robust.jl`
+
+### Acceptance Criterion
+
+T-BOX-9 green
+
+### On Failure
+
+```
+TASK 075 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 076: Shared cases with caps; Python wrapper `upper` keyword and dataclass field
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 075
+
+### What to do
+
+Shared cases with caps; Python wrapper `upper` keyword and dataclass field. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `scripts/fill_cases.jl`
+- `test/cases/case_runner.jl`
+- `test/cases/cases.toml` (regenerated, never hand-edited)
+- `python/kelly_kl/`
+- `python/tests/case_runner.py`
+
+### Acceptance Criterion
+
+T-BOX-13 green; T-PY-1–3 still green
+
+### On Failure
+
+```
+TASK 076 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 077: Docstrings and README section on caps (depth and exit examples, meaning of ν* and shadow prices); ADR-015 diagnostics docstrings
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 076
+
+### What to do
+
+Docstrings and README section on caps (depth and exit examples, meaning of ν* and shadow prices); ADR-015 diagnostics docstrings. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `src/*.jl` docstrings (incl. `src/diagnostics.jl`, docstrings only)
+- `README.md`
+
+### Acceptance Criterion
+
+README has a runnable capped example whose printed output matches T-BOX-1; every function with `upper` documents it; docstrings of `growth_loss`, `growth_curve`, `zero_growth_point`, `simulate_ruin` state that they use the uncapped optimum or the allocation as given; no code change in `diagnostics.jl` (`git diff` shows docstring lines only)
+
+### On Failure
+
+```
+TASK 077 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 078: Full regression gate (Success Criterion 1)
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 077
+
+### What to do
+
+Full regression gate (Success Criterion 1). Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- none (run only)
+
+### Acceptance Criterion
+
+T-BOX-14 green on John's machine: full `Pkg.test()`, T-E1-2, `reproduce_all: PASS — 8 experiments, 23 files`, pytest
+
+### On Failure
+
+```
+TASK 078 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
+
+## Task 079: Release 0.2.0
+
+**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 078
+
+### What to do
+
+Release 0.2.0. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+
+### Files touched
+
+- `Project.toml`
+- `python/pyproject.toml`
+- `CHANGELOG.md`
+
+### Acceptance Criterion
+
+both files read `version = "0.2.0"`; CHANGELOG has a `## [0.2.0] — <date>` entry listing Tasks 064–079 and ADR-012…016; annotated tag `v0.2.0` points at this commit; every commit for Tasks 064–079 (`git log v0.1.0..v0.2.0`; earlier post-v0.1.0 commits such as Tasks 062–063 predate the rule) has both Agent/Model lines and none names a Gemini model
+
+### On Failure
+
+```
+TASK 079 FAILED
+Criterion: <criterion text>
+Observed: <what happened>
+Error: <full output>
+```
