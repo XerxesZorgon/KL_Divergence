@@ -91,5 +91,6 @@ fixture files under `test/oracle/` that are committed to git; Julia tests only r
 | Date | Generator | Attempted | Rejected | Rate | Note |
 |---|---|---|---|---|---|
 | 2026-11-11 | prototype (Claude, scratch script, not committed): S = 8, J = 5 with cash, bet caps U(0.05, 0.3), seed 3 | 30 | 1 | 3.3% | rejected case: ρ_u = 9.4e-8 at τ_o (Clarabel accuracy); all 29 accepted were non-degenerate at margin 1e-6; 8 had a binding cap |
+| 2026-11-13 | `generate_box_oracle.py` (seed 71; Python 3.14.10, cvxpy 1.9.3, clarabel 0.11.1) | allocation 200, kl 100 | allocation 7, kl 4 | allocation 3.5%, kl 4.0% | accepted: 193 allocation + 96 kl = 289 cases. Redrawn (not counted as attempted): allocation 18 (no cap could be built: no bet with uncapped stake > 0.03, or no-cash n = 1), 0 non-binding; kl 16 (no cap could be built) + 83 (all-cash, λ ≤ 1e-9 or no binding cap). Degenerate at margin 1e-6: 0 allocation, 0 kl. Largest stored ρ_u 9.3e-9. Some solves returned `optimal_inaccurate` and were kept only if they passed the ρ_u rule. `requirements_sha256` 667ae44c1c34… |
 
 Task 071 (PLAN.md M9) appends the row for the committed fixtures.
