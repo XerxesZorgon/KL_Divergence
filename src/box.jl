@@ -53,3 +53,6 @@ function _project_capped(x::AbstractVector{<:Real}, u::Vector{Float64})::Vector{
     isempty(F) || (a[F] .+= (1 - sum(a)) / length(F))
     return a
 end
+
+# Near-point caps (ADR-016): no cash and |Σu − 1| ≤ BOX_FEAS_TOL, so A_u is empty or a single point. `u` is normalized or `nothing`.
+_near_point(m::ScenarioModel, u) = u !== nothing && !m.has_cash && abs(sum(u) - 1) ≤ BOX_FEAS_TOL

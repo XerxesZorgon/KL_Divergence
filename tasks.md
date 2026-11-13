@@ -3451,7 +3451,7 @@ Error: <full output>
 
 ## Task 067: `upper` field on `BetResult` / `RobustResult`; constructor keyword; certification hook recomputes with `result.upper`
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 066
+**Status:** [x] Done (2026-11-13, commit f485d91; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 066
 
 ### What to do
 
@@ -3478,7 +3478,7 @@ Error: <full output>
 
 ## Task 068: Caps in `solve_conic`
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 067
+**Status:** [x] Done (2026-11-13, commit 6bed32f; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 067
 
 ### What to do
 
@@ -3504,7 +3504,7 @@ Error: <full output>
 
 ## Task 069: Caps in `polish_crra` / `polish_log_optimal` (fixed capped coordinates, upper ratio test, release rule, ν-based add rule, projection)
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 068
+**Status:** [x] Done (2026-11-13, commit d26be63; Agent: Claude Code 2.1.228; deviation: _project_snap fast path (zeros stay zero), approved) **Milestone:** M9 **Depends on:** Task 068
 
 ### What to do
 
@@ -3725,7 +3725,7 @@ Error: <full output>
 
 ### What to do
 
-Docstrings and README section on caps (depth and exit examples, meaning of ν* and shadow prices); ADR-015 diagnostics docstrings. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures.
+Docstrings and README section on caps (depth and exit examples, meaning of ν* and shadow prices); ADR-015 diagnostics docstrings. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures. Also update DESIGN.md §10 polish row: _project_snap fast path (Task 069).
 
 ### Files touched
 
