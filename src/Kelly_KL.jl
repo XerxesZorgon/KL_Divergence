@@ -8,7 +8,7 @@ import Clarabel, SCS, Distributions
 const MOI = JuMP.MOI
 
 export ScenarioModel, single_event, simultaneous_bets, correlated_bets, payoffs_from_odds, growth
-export BetResult, CertificationError, SolverError, kkt_residual, certify
+export BetResult, CertificationError, SolverError, kkt_residual, kkt_components, certify
 export optimal_allocation
 export beta_predictive, dirichlet_predictive, predictive_from_draws, sampled_payoffs, growth_se, mixture, bma_weights
 export kl, growth_loss, holdout_logscore, logscore_difference, growth_curve, zero_growth_point
