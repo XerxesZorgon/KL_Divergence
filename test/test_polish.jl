@@ -74,3 +74,62 @@ end
     @test_throws ArgumentError polish_crra(_POLISH_REG_M.X, _POLISH_REG_M.π, _POLISH_REG_A0, -1.0)
 end
 
+
+@testset "T-BOX-10 polish with caps (Task 069)" begin
+    draw_caps(rng, J) = [j == 1 ? Inf : (rand(rng) < 0.5 ? 0.02 + 0.3 * rand(rng) : Inf) for j in 1:J]
+
+    # (a) release: warm start at the cap, optimum is interior
+    Xa = [1.0 2.0; 1.0 0.0]; πa = [0.6, 0.4]; ua = [Inf, 0.3]
+    a, ρ = Kelly_KL.polish_log_optimal(Xa, πa, [0.7, 0.3]; upper = ua)
+    @test a[2] < ua[2] - 1e-9
+    @test abs(a[2] - 0.2) ≤ 1e-9
+    @test ρ ≤ 1e-10
+
+    # (b) add with ν < r_j < 1
+    rng = StableRNG(69)
+    used = 0
+    mb = nothing; ub = nothing; a0b = nothing; a_starb = nothing; jb = 0
+    for d in 1:1000
+        m = rand_correlated_model(rng)
+        m.has_cash || continue
+        u = draw_caps(rng, size(m.X, 2))
+        a_star, _ = polish_log_optimal(m.X, m.π, solve_conic(m; upper = u); upper = u)
+        for j in 2:length(a_star)
+            (a_star[j] > 1e-6 && a_star[j] < u[j] - 1e-6) || continue
+            a0 = copy(a_star); a0[1] += a0[j]; a0[j] = 0.0
+            _, ν0, _, _, _ = Kelly_KL.kkt_components(m.X, a0, m.π; upper = u)
+            rj = (m.X' * (m.π ./ (m.X * a0)))[j]
+            if ν0 < rj < 1
+                used = d; mb, ub, a0b, a_starb, jb = m, u, a0, a_star, j
+                break
+            end
+        end
+        used > 0 && break
+    end
+    println("T-BOX-10 (b): precondition met at draw $used")
+    @test used > 0
+    if used > 0
+        a, ρ = polish_log_optimal(mb.X, mb.π, a0b; upper = ub)
+        @test a[jb] > 0
+        @test ρ ≤ 1e-10
+        @test abs(growth(mb, a) - growth(mb, a_starb)) ≤ 1e-10
+    end
+
+    # (c) random robustness
+    rng = StableRNG(691)
+    n = 0
+    while n < 100
+        m = rand_correlated_model(rng)
+        m.has_cash || continue
+        n += 1
+        u = draw_caps(rng, size(m.X, 2))
+        a_c = solve_conic(m; upper = u)
+        for k in (0.0, 1.5)
+            a, ρ = polish_crra(m.X, m.π, a_c, k; upper = u)
+            @test ρ ≤ 1e-10
+            @test all(0 .≤ a .≤ u)
+            @test abs(sum(a) - 1) ≤ 1e-14
+            k == 0.0 && @test growth(m, a) ≥ growth(m, a_c) - 1e-12
+        end
+    end
+end
