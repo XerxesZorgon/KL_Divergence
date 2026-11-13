@@ -5,11 +5,15 @@ struct BetResult
     method::Symbol
     active::Vector{Int}
     assets::Vector{String}
+    upper::Union{Nothing, Vector{Float64}}
 end
 
-function BetResult(m::ScenarioModel, a::AbstractVector{<:Real}, method::Symbol; τ_a::Real = ACTIVE_TOL)
+BetResult(a, growth, kkt, method, active, assets) = BetResult(a, growth, kkt, method, active, assets, nothing)
+
+function BetResult(m::ScenarioModel, a::AbstractVector{<:Real}, method::Symbol; τ_a::Real = ACTIVE_TOL, upper = nothing)
     a_vec = Vector{Float64}(a)
-    return BetResult(a_vec, growth(m, a_vec), kkt_residual(m.X, a_vec, m.π; τ_a = τ_a), method, findall(>(τ_a), a_vec), m.assets)
+    up = upper === nothing ? nothing : Vector{Float64}(upper)
+    return BetResult(a_vec, growth(m, a_vec), kkt_residual(m.X, a_vec, m.π; τ_a = τ_a, upper = up), method, findall(>(τ_a), a_vec), m.assets, up)
 end
 
 struct CertificationError <: Exception

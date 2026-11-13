@@ -9,7 +9,11 @@ struct RobustResult
     ball::Symbol
     ε::Float64
     certificate::Symbol
+    upper::Union{Nothing, Vector{Float64}}
 end
+
+RobustResult(a, worst_case_growth, nominal_growth, λ, Q, support, kkt, ball, ε, certificate) =
+    RobustResult(a, worst_case_growth, nominal_growth, λ, Q, support, kkt, ball, ε, certificate, nothing)
 
 function _validate_kl_inner_inputs(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real, name::AbstractString)
     (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("$name requires finite ε ≥ 0, got $ε"))

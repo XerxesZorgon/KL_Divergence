@@ -3399,7 +3399,7 @@ Error: <full output>
 
 ## Task 065: Projection onto A_u
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 064
+**Status:** [x] Done (2026-11-13, commit cebd71f; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 064
 
 ### What to do
 
@@ -3425,7 +3425,7 @@ Error: <full output>
 
 ## Task 066: Minimax residual (ADR-013): `kkt_residual(...; upper)` and internal `kkt_components` returning ν*
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 065
+**Status:** [x] Done (2026-11-13, commit cfc2683; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 065
 
 ### What to do
 

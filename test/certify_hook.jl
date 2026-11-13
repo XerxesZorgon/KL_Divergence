@@ -3,7 +3,7 @@ using Kelly_KL: greedy_allocation
 
 function assert_certified(result::BetResult, m::ScenarioModel; tol = 1e-10)
     @test result.kkt ≤ tol
-    @test kkt_residual(m.X, result.a, m.π) ≈ result.kkt atol = 1e-14
+    @test kkt_residual(m.X, result.a, m.π; upper = result.upper) ≈ result.kkt atol = 1e-14
 end
 
 rand_simplex(rng, n) = (x = randexp(rng, n); x ./ sum(x))
