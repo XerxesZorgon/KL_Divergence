@@ -39,3 +39,9 @@ probability simplex Δ^J, wealth V_s(a) = (X a)_s and growth G(a) = Σ_s π_s lo
   w − 1). The parent article's two-bet example (p, w) = (0.3, 4), (0.25, 6) reproduces its
   published fractions (0.0645, 0.0992) only under the gross convention (checked numerically
   2026-11-01), so this convention is consistent with the parent article.
+
+## Amendment (ADR-012, 2026-11-11)
+The allocation set widens from Δ^J to A_u = {a ≥ 0, Σa = 1, a_j ≤ u_j}, u_j ∈ (0, ∞], cash uncapped,
+when the caller passes `upper`. Caps are a solve argument, not part of `ScenarioModel`: π, X, `mixture`
+and `predictive_from_draws` are unchanged. With `upper = nothing` the set is Δ^J as before. Leverage,
+shorting, lower bounds other than 0, fixed costs and minimum stakes remain excluded.

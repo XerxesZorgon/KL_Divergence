@@ -48,3 +48,11 @@ the KKT residual and throw if it exceeds 1e-10. SCS.jl is a fallback selectable 
 ## Amendment (Task 040, 2026-11-03)
 Robust bets do not use a ForwardDiff joint Newton: the KL ball uses the CRRA-weighted polish with analytic gradient and Hessian inside a 1-D λ search, and the Wasserstein ball uses structure iteration plus a two-tier certificate (ADR-005, ADR-006 amendments). ForwardDiff was removed.
 
+## Amendment (ADR-012, 2026-11-11)
+With caps, "optimal" means generalized KKT residual ρ_u ≤ 1e-10 (DESIGN.md §10.2): the budget
+multiplier ν replaces the constant 1 (r_j = ν on free assets, ≤ ν on zero assets, ≥ ν on capped assets)
+and cap violations (a_j − u_j)⁺ are added to the feasibility terms. With no caps ν = 1 and ρ_u is the
+§5.2 residual exactly. The §5.2/§10.2 residual remains the single source of truth; polish failure still
+throws `CertificationError`. Any finite cap sends single events to the conic path (the closed forms
+ignore caps); the Newton polish fixes capped coordinates and adds an upper-bound ratio test.
+

@@ -31,3 +31,11 @@ hygiene (ambiguities, unbound type parameters, stale dependencies).
   `KELLY_KL_QUICK=1` env var reduces it to 2 000 trials for inner-loop runs; the full run is the gate.
 - Line coverage is reported (target ≥ 85% of `src/`) but is not a pass condition by itself.
 - TEST_PLAN.md lists every test ID and its pass criterion.
+
+## Amendment (ADR-014, 2026-11-11)
+A fifth test kind, **fixture oracles**: reference solutions from an independent solver (cvxpy 1.9.3 +
+clarabel 0.11.1) are generated offline by `test/oracle/generate_box_oracle.py`, accepted only if the oracle
+certifies itself (ρ_u ≤ 1e-8 at τ_o = 1e-8), committed as `test/oracle/box_oracle.toml`, and read by Julia
+tests. `Pkg.test()` stays Julia-only and deterministic; Python is not needed to run it. Fixtures change only
+by a hand-run regeneration recorded in its own commit. (The shared parity cases are TOML, not JSON:
+DESIGN.md §3.3.)

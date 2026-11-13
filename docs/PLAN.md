@@ -17,6 +17,7 @@ unchanged) → simultaneous/correlated bets → uncertain p and payoffs + model 
 | M6 | Experiments E2–E7 | `experiments/plotting.jl` extracted (E1 SVG still byte-identical); E2–E7 scripts meet their pass criteria (TEST_PLAN §G); figures in `../img/` | M3, M4, M5 |
 | M7 | Python wrapper | `python/kelly_kl` + `juliapkg.json`; shared TOML cases filled from Julia; T-PY-1…3 green | M5 |
 | M8 | Reproduce-all and reference outputs | `reproduce_all.jl` + comparator; references generated on John's machine and committed; T-REP-1, T-REP-2, T-AQ-1 green; README/CHANGELOG updated | M6, M7 |
+| M9 | v0.2.0 — per-asset upper bounds (ADR-012…016) | OQ-1…OQ-4 closed by ADR-013…016 (met 2026-11-11); T-BOX-1…16 green; tag `v0.2.0` | M8 (tag `v0.1.0` at 8b6ac19) |
 
 ### Errata track (article content, not library)
 | Task | Content | Status / evidence (2026-11-01) |
@@ -26,6 +27,56 @@ unchanged) → simultaneous/correlated bets → uncertain p and payoffs + model 
 | — | λ·Var penalty conflicts with thesis | Present in the parent article (Beta-uncertainty section, `max_b {E_P[g] − λ Var_P[g]}`). Erratum stands. |
 | — | Half-Kelly simulations conflict with thesis | Present (code block building `res_half = 0.5 .* res_kelly.b`, "Half Kelly vs Full Kelly Battle" exercise). Relabel as baseline or remove. |
 | T-ERR-3 | Candidate erratum: "weak prior reduces fractions by over 15%" | Not reproduced. With p ~ Beta(s·m, s(1−m)) and win ~ Bernoulli(p), each bet wins with probability m for every s, so the optimum is identical for s = 2 and s = 1000 (package: identical bets, ≤ 1e-12; total 0.163655). The reported 15.44% is consistent with Monte Carlo noise: the repo's objective re-samples with GLOBAL_RNG at every evaluation, and the article's Scenario A itself misses the exact bet by 0.0012. Erratum stands (Task 026); the parent code was not re-run. |
+
+## Milestone M9 — v0.2.0: per-asset upper bounds (added 2026-11-11)
+Source: Cowork brief "Kelly_KL v0.2 — per-asset upper bounds (box constraints)"; decisions in ADR-012;
+interface and code locations in DESIGN.md §10; tests in TEST_PLAN.md §H.
+
+**Gate before Task 064 (no code):** DESIGN.md §8 OQ-1 (free set empty), OQ-2 (oracle location and
+tolerances; amends ADR-010) and OQ-3 (diagnostics) are each closed by an ADR, and §8 is empty again.
+If OQ-2 adds Python test dependencies (`cvxpy`, `clarabel`), they are pinned in the Dependency Lock below
+by that ADR.
+**Gate status (2026-11-11):** OQ-1, OQ-2 and OQ-3 are closed by ADR-013, ADR-014 and ADR-015 (approved by
+John 2026-11-11); cvxpy 1.9.3 and clarabel 0.11.1 are in the Dependency Lock. Tasks 064–069 may start.
+**New gate before Task 070:** DESIGN.md §8 OQ-4 (caps summing to about 1 without cash, raised while closing
+OQ-1) is closed by an ADR and §8 is empty. Task list below revised 2026-11-11 for ADR-013…015 (generator
+task inserted as 071; later tasks renumbered, now 064–079).
+**Gate status update (2026-11-11):** OQ-4 closed by ADR-016 (approved by John); DESIGN.md §8 is empty. All
+M9 tasks may proceed in order.
+
+**Authorship rule (M9 only, and every later commit in this repository):** no Gemini-authored commits.
+Kelly_KL is the frozen reference for the AFS-GEM assessment, so its code must not be written by the model
+being assessed. Antigravity runs M9 tasks with a non-Gemini model. Every commit message ends with:
+```
+Agent: <tool name and version>
+Model: <exact model id>
+```
+A commit without both lines, or naming a Gemini model, is reverted.
+
+Task numbers continue `tasks.md` (last: 063). One concern per task; each criterion is pass/fail.
+
+| Task | Concern | Files | Acceptance criterion (binary) |
+|---|---|---|---|
+| 064 | Cap validation and normalization (internal helper); feasibility threshold Σu_j < 1 − 1e-12 (ADR-013) | new `src/box.jl`, `src/Kelly_KL.jl` (include), `test/test_box.jl` | T-BOX-8 (a)–(e) green; caps ≥ 1 → `Inf`; all-`Inf` → `nothing` (unit test) |
+| 065 | Projection onto A_u | `src/box.jl`, `test/test_box.jl` | T-BOX-11 green (bisection characterization; no Python) |
+| 066 | Minimax residual (ADR-013): `kkt_residual(...; upper)` and internal `kkt_components` returning ν* | `src/certify.jl`, `test/test_certify.jl` | T-BOX-5 green (bitwise); T-BOX-12 green; T-BOX-3 (v) green; on the hand-built a = (0.9, 0.1) of T-BOX-1: ρ_u = 0 within 1e-15, ν* = 98/99 and r_bet = 12/11 within 1e-12 |
+| 067 | `upper` field on `BetResult` / `RobustResult`; constructor keyword; certification hook recomputes with `result.upper` | `src/certify.jl`, `src/robust.jl` (struct only), `test/certify_hook.jl` | full `Pkg.test()` green with no caller passing caps (no behavior change) |
+| 068 | Caps in `solve_conic` | `src/conic.jl`, `test/test_conic_raw.jl` | raw conic output lies in A_u (feasibility terms ≤ 1e-8) on 200 random capped problems; uncapped `test_conic_raw` results unchanged bitwise |
+| 069 | Caps in `polish_crra` / `polish_log_optimal` (fixed capped coordinates, upper ratio test, release rule, ν-based add rule, projection) | `src/polish.jl`, `test/test_polish.jl` | T-BOX-10 green; existing `test_polish` results unchanged bitwise |
+| 070 | `optimal_allocation(...; upper)`, conic dispatch on any finite cap; near-point shortcut (ADR-016) | `src/optimize.jl`, `src/box.jl` (near-point test), `test/test_optimize.jl` | T-BOX-1 and T-BOX-4 green; T-BOX-16 (a), (c), (d) green |
+| 071 | Oracle generator and committed fixtures (ADR-014) — run by hand, no library code; two commits: (1) frozen `requirements.txt`, (2) generator + fixtures | new `test/oracle/generate_box_oracle.py`, `test/oracle/requirements.txt` (`pip freeze` of the generator venv: Python 3.14.10, cvxpy 1.9.3, clarabel 0.11.1 and every transitive package pinned), `test/oracle/box_oracle.toml`, `.gitignore` (generator venv), `docs/adr/ADR-014` (rejection-log row) | commit (1) adds only `test/oracle/requirements.txt` and precedes commit (2) in `git log`; the generator refuses to run while `requirements.txt` has uncommitted changes; fixture header `requirements_sha256` equals the SHA-256 of the committed file; KL cases pass ADR-014 rules (i)–(ii); generator exits 0 with rejection rate ≤ 10% per kind; fixture holds ≥ 180 of 200 attempted `allocation` cases and ≥ 90 of 100 attempted `kl` cases (TEST_PLAN T-BOX-2, T-BOX-7) with seed, versions, attempted/rejected counts in its header; ADR-014 rejection log has the new row; `Pkg.test()` unchanged and needs no Python |
+| 072 | Fixture reader and oracle tests | `test/oracle_reader.jl` (or inside `test/test_box.jl`), `test/runtests.jl`, `Project.toml` (`[extras]`/`[targets]`: SHA stdlib, test only) | T-BOX-2, T-BOX-3 (i)–(iv) and T-BOX-15 green |
+| 073 | `kl_cash_radius(...; upper)` (validation only) | `src/robust.jl`, `test/test_robust.jl` | first clause of T-BOX-6 green (`===` equality) |
+| 074 | Caps in `kl_robust_conic` and `kl_robust_allocation` (ε = 0 path, cash path, λ search, saddle certificate with minimax ρ_u) | `src/robust.jl`, `test/test_robust.jl` | T-BOX-7 (against the `kl` fixtures, ADR-014 rule iii), remaining clauses of T-BOX-6, and T-BOX-16 (b) green |
+| 075 | Wasserstein rejects caps | `src/robust.jl`, `test/test_robust.jl` | T-BOX-9 green |
+| 076 | Shared cases with caps; Python wrapper `upper` keyword and dataclass field | `scripts/fill_cases.jl`, `test/cases/case_runner.jl`, `test/cases/cases.toml` (regenerated, never hand-edited), `python/kelly_kl/`, `python/tests/case_runner.py` | T-BOX-13 green; T-PY-1–3 still green |
+| 077 | Docstrings and README section on caps (depth and exit examples, meaning of ν* and shadow prices); ADR-015 diagnostics docstrings | `src/*.jl` docstrings (incl. `src/diagnostics.jl`, docstrings only), `README.md` | README has a runnable capped example whose printed output matches T-BOX-1; every function with `upper` documents it; docstrings of `growth_loss`, `growth_curve`, `zero_growth_point`, `simulate_ruin` state that they use the uncapped optimum or the allocation as given; no code change in `diagnostics.jl` (`git diff` shows docstring lines only) |
+| 078 | Full regression gate (Success Criterion 1) | none (run only) | T-BOX-14 green on John's machine: full `Pkg.test()`, T-E1-2, `reproduce_all: PASS — 8 experiments, 23 files`, pytest |
+| 079 | Release 0.2.0 | `Project.toml`, `python/pyproject.toml`, `CHANGELOG.md` | both files read `version = "0.2.0"`; CHANGELOG has a `## [0.2.0] — <date>` entry listing Tasks 064–079 and ADR-012…016; annotated tag `v0.2.0` points at this commit; every commit for Tasks 064–079 (`git log v0.1.0..v0.2.0`; earlier post-v0.1.0 commits such as Tasks 062–063 predate the rule) has both Agent/Model lines and none names a Gemini model |
+
+Integration checkpoints for M9: quick suite after 066, 069 and 074; full suite and T-E1-2 after 070 and
+078 (the gate); John reviews the diff summary after 070, reviews the fixture diff after 071, and reviews
+before 079. A fixture regeneration is always its own commit (ADR-014).
 
 ## Dependency Lock
 Latest registered versions on 2026-11-01 (Julia General registry / PyPI). T0 records any change the
@@ -49,6 +100,11 @@ resolver makes on Julia 1.12; no other changes without a dedicated task.
 | juliapkg | 0.1.28 (installed with juliacall 0.9.37) | Python dep (transitive) |
 | numpy | 2.5.4 (Task 050) | Python dep |
 | pytest | 9.2.0 (Task 050) | Python test |
+| cvxpy | 1.9.3 (ADR-014, 2026-11-11) | oracle generation only, not a runtime or test dependency |
+| clarabel (PyPI) | 0.11.1 (ADR-014, 2026-11-11) | oracle generation only, not a runtime or test dependency |
+| Python (oracle generator venv) | 3.14.10 (ADR-014; cp314 / abi3 Windows wheels for both packages exist, checked 2026-11-11) | oracle generation only; venv outside the repo or git-ignored |
+| oracle transitive packages (numpy, scipy, highspy, osqp, qdldl, scs, sparsediffpy) | exact pins in `test/oracle/requirements.txt`, written and committed by Task 071 before generation; its SHA-256 is recorded in the fixture header | oracle generation only |
+| SHA | stdlib (Julia 1.12.1; compat entry added by Task 072) | test only (T-BOX-15 fixture hash, ADR-014) |
 
 `[compat]` in Project.toml uses caret bounds at these versions (e.g. `JuMP = "1.32.1"`) plus
 `julia = "1.12"`; the Manifest is the exact lock.

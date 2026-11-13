@@ -45,3 +45,8 @@ a ∈ Δ^J, λ ≥ 0, where K_exp = cl{(x, y, z) : y e^{x/y} ≤ z, y > 0}.
 ## Amendment (Task 036–040, 2026-11-03)
 Implemented as: cash test via the no-edge I-projection (`kl_cash_radius`: robust bet is all cash iff ε ≥ D_min = min{D(Q‖π): E_Q[X_j] ≤ 1 ∀ bets}), else conic seed + 1-D λ search with the CRRA polish. Prototype: 120/120 cases classified like the joint conic; 83/83 interior cases certified to 1.6e-14. v1 limit: λ* → 0 without cash-optimality throws `CertificationError`.
 
+## Amendment (ADR-012, 2026-11-11)
+With caps, the saddle-point certificate uses the generalized residual ρ_u (DESIGN.md §10.2) under Q*,
+and the joint program adds a_j ≤ u_j. The CRRA equivalence holds unchanged over A_u. The cash test is
+claimed unchanged (no cap is active at all-cash); this claim is Unverified until T-BOX-6 passes.
+

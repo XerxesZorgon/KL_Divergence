@@ -134,12 +134,16 @@ optimal_allocation(q, ohat; cash::Bool)                         -> BetResult   #
 Dispatch: `structure == :single_event` and `!has_cash` → a = q (Cover–Thomas); `:single_event` with
 cash → greedy (§5.1); otherwise conic (§5.3) + polish (§5.4). `solver ∈ (:clarabel, :scs)`. Always
 certified (§5.2). `growth(m, a)` and `growth(X, a, π)` return G.
+**v0.2 (ADR-012):** both methods take `upper = nothing` (per-asset caps); any finite cap forces the conic
+path. Signatures, defaults and errors: §10.1, §10.3.
 
 ### 4.3 Certification
 ```julia
 kkt_residual(X, a, π; τ_a = 1e-12) -> Float64
 certify(result; tol = 1e-10)       -> result  # throws CertificationError
 ```
+**v0.2 (ADR-012):** `kkt_residual` takes `upper = nothing`; with caps it returns ρ_u (§10.2). `certify` is
+unchanged (it compares the stored residual, computed with `result.upper`).
 
 ### 4.4 Uncertain probabilities, payoffs, model averaging
 | Function | Inputs | Output |
@@ -180,6 +184,8 @@ wasserstein_worst_case(m, a, ε; unseen, cost)        -> (value, λ, Q)   # exac
 ```
 `ε` is required (ADR-011). `cost ∈ (:l1, :linf)` or an S × T matrix. `unseen` rows must have J columns
 and non-negative entries.
+**v0.2 (ADR-012):** `kl_robust_allocation` and `kl_cash_radius` take `upper = nothing`;
+`wasserstein_robust_allocation` takes `upper = nothing` only to reject caps (`ArgumentError`). See §10.
 
 ### 4.7 Cross-check
 `cover_update(X, π; tol = 1e-11, maxiter = 2_000_000) -> (a, kkt, iters)` — E1's `log_optimal`,
@@ -209,6 +215,9 @@ Since Σ_j a_j r_j = Σ_s π_s = 1, the KKT conditions are r_j ≤ 1 for all j a
 $$\rho(a)=\max\Big\{\max_j (r_j-1),\ \max_{j:\,a_j>\tau_a}|r_j-1|,\ \max(0,-\min_j a_j),\ \big|\textstyle\sum_j a_j-1\big|\Big\}.$$
 
 E1 used only the first term; the full residual adds the support and feasibility terms. Pass ⇔ ρ ≤ 1e-10.
+**Amended in v0.2 (ADR-012):** when caps are supplied, the generalized residual ρ_u of §10.2 replaces ρ
+(the multiplier ν replaces the constant 1). With `upper = nothing`, ρ is computed by the expression above,
+unchanged, so v0.1 residuals are bit-identical.
 
 ### 5.3 Conic log-optimal program
 maximize Σ_s π_s t_s subject to (t_s, 1, (Xa)_s) ∈ K_exp, a ∈ Δ^J, where
@@ -307,8 +316,121 @@ the Manifest on Julia 1.12.x and records any version the resolver had to change.
 None.
 
 ## 9. Resolved Design Questions (record)
+### v0.2 (moved from §8, 2026-11-11)
+- OQ-1 → **ADR-013** (ν by minimax; no division; F = ∅ handled; feasibility threshold 1 − 1e-12).
+- OQ-2 → **ADR-014** (offline cvxpy + Clarabel fixtures, τ_o = 1e-8, strict-complementarity margin 1e-6,
+  tolerances; amends ADR-010).
+- OQ-3 → **ADR-015** (diagnostics stay uncapped in v0.2).
+- OQ-4 → **ADR-016** (no cash and |Σu − 1| ≤ 1e-12: skip the solver, a = u/Σu, method `:single_point`; also in
+  `kl_robust_allocation`). Raised 2026-11-11 while closing OQ-1: for Σu just below 1, A_u is empty in exact
+  arithmetic; just above 1 it is a near-point, and the conic solver may report the problem infeasible.
+
+Original text, kept for the record:
+
+- **OQ-1 — Free set empty (F = ∅).** Then Σ_{j∈U} u_j = 1 and ν = (1 − Σ_U u_j r_j)/(1 − Σ_U u_j) is 0/0
+  (example: no cash, u summing to 1, A_u = {u}). Any ν in [max_Z r_j, min_U r_j] satisfies the KKT
+  conditions. Recommendation: in that case set the ν-terms of ρ_u to (max_Z r_j − min_U r_j)⁺ (0 when Z = ∅).
+  Also decide (i) a threshold below which 1 − Σ_U u_j is treated as 0 (the formula is ill-conditioned
+  near it), and (ii) whether Σ u_j that misses 1 only by rounding (no cash) is infeasible or accepted.
+- **OQ-2 — Independent oracle and comparison tolerance.** The brief cites "the Python oracle pattern from
+  ADR-010", but ADR-010 defines no such pattern and the repository has no cvxpy code (python/tests holds
+  only `case_runner.py`, `conftest.py`, `test_parity.py`). Decide: where the cvxpy + Clarabel oracle runs
+  (pytest test with pinned `cvxpy`/`clarabel` test dependencies, or an offline script whose results are
+  stored as fixtures), and the comparison tolerances. Clarabel's 1e-12 is a *solver* tolerance; allocations
+  from an interior-point method are not accurate to 1e-12 in general (it warned "solution may be
+  inaccurate" in the 2026-11-11 checks; T-ORC-4 uses 1e-7 for the same reason). Proposed: growth ≤ 1e-10,
+  allocation and ν ≤ 1e-8 on non-degenerate cases. Amends ADR-010.
+- **OQ-3 — Diagnostics with caps.** `growth_loss(m_true, a_belief)` compares with the uncapped optimum
+  a_p; for a capped bettor the fair comparison is the capped optimum. `growth_curve` / `zero_growth_point`
+  scale bets by c > 1, which can exceed caps. Recommendation: no caps in v0.2 diagnostics (they take the
+  allocation as given; docstrings say so); `growth_loss` gains `upper` in a later version. Confirm or reject.
+
+### v0.1
 - Wasserstein ground metric and support (outline OQ-2) → ADR-006 (finite support, L1).
 - Figure backend → ADR-008. Julia version → ADR-001 (exact patch is a recorded fact, not a design choice).
 - Robust-bet certification and polishing method → §5.6 / §5.9 (joint Newton; alternating scheme rejected after test).
 - Source of the errata pair (0.0667, 0.12) is a **content** question for the article, handled in PLAN.md
   (task T-ERR-1), not a library design question.
+
+## 10. v0.2 amendments: per-asset upper bounds (ADR-012, 2026-11-11)
+Allocation set with caps: A_u = {a : a ≥ 0, Σ_j a_j = 1, a_j ≤ u_j}, u_j ∈ (0, ∞], cash uncapped. Use cases
+(AFS-GEM): order-book depth (one asset per price level, each with limited stake) and exits (an existing
+position valued at its liquidation bid, held up to its current size). Sections §1–§9 describe v0.1 and
+remain valid when `upper = nothing`.
+
+### 10.1 Public interface changes
+```julia
+optimal_allocation(m::ScenarioModel; method = :auto, solver = :clarabel, tol = 1e-10, upper = nothing) -> BetResult
+optimal_allocation(q, ohat; cash = true, method = :auto, solver = :clarabel, tol = 1e-10, upper = nothing) -> BetResult
+kkt_residual(X, a, π; τ_a = 1e-12, upper = nothing)        -> Float64     # ρ (§5.2) or ρ_u (§10.2)
+kl_robust_allocation(m, ε; solver = :clarabel, tol = 1e-10, upper = nothing) -> RobustResult
+kl_cash_radius(m; maxit = 2000, tol = 1e-13, upper = nothing) -> (radius, Q)  # upper validated; result independent of it (claim, T-BOX-6)
+wasserstein_robust_allocation(m, ε; unseen, cost, solver, tol, gap_tol, upper = nothing) -> RobustResult  # upper !== nothing ⇒ ArgumentError
+certify(result; tol = 1e-10) -> result                      # unchanged: compares result.kkt, computed with result.upper
+# internal (not exported), used by tests and the polish:
+kkt_components(X, a, π; τ_a = 1e-12, upper = nothing) -> (ρ, ν*, U, Z, F)   # ν* by minimax (ADR-013)
+```
+- **Default:** `upper = nothing` means no caps and runs the v0.1 code path unchanged.
+- **Form:** `AbstractVector{<:Real}` of length J (cash included, in model column order). Uncapped entries
+  are `Inf`. For the single-event shortcut, J = n + 1 when `cash = true`.
+- **Normalization:** entries u_j ≥ 1 cannot bind on the simplex and are replaced by `Inf`. If every
+  entry is then `Inf`, `upper` is stored as `nothing` and the call is the v0.1 call (byte-identical).
+- **Results:** `BetResult` and `RobustResult` (§3.2) gain a last field `upper::Union{Nothing, Vector{Float64}}`
+  (normalized caps). `BetResult(m, a, method; τ_a, upper)` passes `upper` to `kkt_residual`.
+- **Method values:** `BetResult.method` may also be `:single_point` (near-point shortcut, ADR-016).
+- **Python (ADR-007):** every wrapped function above gains `upper: Optional[np.ndarray] = None` (`np.inf` for
+  uncapped); result dataclasses gain `upper`. No extra logic in Python.
+- **Shared cases (§3.3):** `[case.inputs]` may hold `upper` (TOML array; `inf` is a valid TOML float, read by
+  Julia's TOML stdlib and Python's tomllib).
+
+### 10.2 Generalized KKT residual (single source of truth with caps; ADR-013 supersedes the ADR-012 form)
+r_j(a) = Σ_{s: π_s>0} π_s X_sj / V_s(a). Sets, with τ_a = 1e-12: U = {j : u_j < ∞, a_j ≥ u_j − τ_a} (capped),
+Z = {j ∉ U : a_j ≤ τ_a} (zero), F = the rest (free). KKT holds iff some ν has r_j = ν on F, r_j ≤ ν on Z,
+r_j ≥ ν on U. With A = max_{j∈F∪Z} r_j (max ∅ = −∞) and B = min_{j∈F∪U} r_j (min ∅ = +∞):
+
+$$\text{ν-part}=\begin{cases}\max\big(0,\tfrac{A-B}{2}\big)&A,B\text{ finite}\\0&\text{otherwise}\end{cases},\qquad \nu^*=\begin{cases}\tfrac{A+B}{2}&A,B\text{ finite}\\A&B=+\infty\\B&A=-\infty\end{cases}$$
+
+$$\rho_u(a)=\max\Big\{\text{ν-part},\ \max_j(-a_j)^+,\ \max_j(a_j-u_j)^+,\ \big|\textstyle\sum_j a_j-1\big|\Big\}.$$
+
+The ν-part is the minimum over ν of the ADR-012 terms max_F|r_j − ν|, max_Z(r_j − ν)⁺, max_U(ν − r_j)⁺.
+Meaning: every free asset has the same marginal growth ν*; an unheld asset would not add growth at the
+margin (r_j ≤ ν*); a capped asset would add growth if its cap were raised (r_j ≥ ν*, shadow price r_j − ν*).
+For any b ∈ A_u, G(b) − G(a) ≤ 2·ν-part + τ_a Σ_{Z∪U}|r_j − ν*| (ADR-013), so ρ_u ≤ 1e-10 means growth
+within ≈ 2e-10 of the capped optimum.
+Implementation rule: if `upper === nothing` (or every cap normalizes to ∞), ρ is the v0.1 expression of
+§5.2, unchanged. With any finite cap, ρ_u above is used, also when U = ∅. The closed form
+ν = (1 − Σ_U u_j r_j)/(1 − Σ_U u_j) is a test oracle only (F ≠ ∅). The same residual applies under any weights
+summing to 1 (Q* for the KL saddle certificate, the CRRA weights in `polish_crra`). Pass ⇔ ρ_u ≤ 1e-10.
+τ_a = 1e-12 is meant for polished allocations (inactive coordinates exactly 0 or u_j); raw interior-point
+output needs a looser classification (ADR-014 uses τ_o = 1e-8 for the oracle).
+
+### 10.3 Error cases (new)
+| Condition | Exception |
+|---|---|
+| `length(upper) != size(m.X, 2)` | `ArgumentError` |
+| any u_j ≤ 0 or NaN | `ArgumentError` |
+| `m.has_cash` and `upper[1]` finite (caps on cash are out of scope) | `ArgumentError` |
+| infeasible caps: `!m.has_cash` and Σ_j u_j < 1 − 1e-12 (ADR-013) | `ArgumentError` (message names Σ u_j); \|Σ_j u_j − 1\| ≤ 1e-12: no error, near-point shortcut (ADR-016) |
+| `wasserstein_robust_allocation(...; upper)` with `upper !== nothing` | `ArgumentError` ("caps not supported for Wasserstein balls in v0.2") |
+| polish cannot reach ρ_u ≤ tol | `CertificationError` (unchanged rule, §6) |
+
+### 10.4 Code locations that change
+| File / function | Change |
+|---|---|
+| `src/conic.jl` `solve_conic` | add `a[j] <= u[j]` for finite caps |
+| `src/conic.jl` `_simplex_value` | rescales with `a ./ sum(a)`, which can push a capped asset over its cap. Do **not** change it: it is also used for Q in `kl_inner_direct` and for a in `wasserstein_robust_conic`. Add a projection onto A_u (below) and use it only when caps are present |
+| new `src/box.jl` | cap validation and normalization (§10.1, §10.3) and the projection below; included from `src/Kelly_KL.jl`; near-point test \|Σu − 1\| ≤ 1e-12 (ADR-016) |
+| projection onto A_u (new internal helper, in `src/box.jl`) | Euclidean projection: a_j = clamp(x_j − θ, 0, u_j) with θ chosen so Σ a_j = 1 (piecewise-linear in θ; exact by sorting breakpoints). Alternative in the brief: fix capped coordinates at u_j and renormalize only the free ones — can itself push a free coordinate over its cap, so it must iterate; the projection is preferred |
+| `src/polish.jl` `polish_crra` | (1) start: replace `a ./= sum(a)` and the `0.999 a + 0.001/J` fallback by the projection; (2) Newton step on F only, capped and zero coordinates fixed (same bordered system, Σ_F Δ = 0); (3) ratio test on both bounds: d_i < 0 reaching 0 (drop to Z, existing) and d_i > 0 reaching u_i (move to U, set a_i = u_i exactly); (4) in-loop `a ./= sum(a)` replaced by the projection; (5) release rule: j ∈ U leaves U when r_j < ν − add_tol; (6) add rule: j ∈ Z joins when r_j > ν + add_tol (v0.1 compares with 1; with caps ν < 1 is possible, so an asset with ν < r_j < 1 must be added); (7) stopping test uses `kkt_residual(...; upper)` |
+| `src/polish.jl` `polish_log_optimal` | pass `upper` through |
+| `src/certify.jl` | `kkt_residual(...; upper)`, `kkt_components`; `BetResult` field and constructor keyword |
+| `src/optimize.jl` `optimal_allocation` | `upper` keyword; any finite cap ⇒ conic path even for `:single_event` (greedy and full investment ignore caps); pass `upper` to conic, polish and `BetResult`; no cash and \|Σu − 1\| ≤ 1e-12 ⇒ return u/Σu with method `:single_point`, no solver (ADR-016) |
+| `src/robust.jl` `kl_robust_conic` | add `a[j] <= u[j]`; projection instead of `_simplex_value` for a |
+| `src/robust.jl` `kl_robust_allocation` | ε = 0 path passes `upper` to `optimal_allocation`; cash path unchanged (no cap active at all-cash, residual computed with `upper`); λ search passes `upper` to `polish_crra`; saddle certificate ρ_u(a*) under Q*; `RobustResult.upper`; same near-point shortcut for every ε: a = u/Σu, worst case from `kl_worst_case`, saddle ρ_u under its Q, no KL-boundary check (ADR-016) |
+| `src/robust.jl` `kl_cash_radius` | validate `upper`; math unchanged (claim: at all-cash no bet cap binds, so the all-cash test is the v0.1 test — **Unverified** until T-BOX-6) |
+| `src/robust.jl` `wasserstein_robust_allocation` | add `upper = nothing` keyword; throw `ArgumentError` if not `nothing` |
+| `test/certify_hook.jl` | recompute residuals with `result.upper` |
+| `scripts/fill_cases.jl`, `test/cases/case_runner.jl`, `python/tests/case_runner.py` | read/write `upper` in `[case.inputs]` |
+| `python/kelly_kl/` | `upper` keyword on every wrapped function above; `upper` field on result dataclasses |
+| unchanged | `model.jl`, `uncertainty.jl`, `diagnostics.jl` (ADR-015: code unchanged; docstrings of `growth_loss`, `growth_curve`, `zero_growth_point`, `simulate_ruin` state they use the uncapped optimum or the allocation as given), `exact.jl`, `crosscheck.jl`, `experiments/` |
+| new `test/oracle/` (ADR-014) | `generate_box_oracle.py` (offline, by hand), `requirements.txt` (exact pins), `box_oracle.toml` (committed fixtures, read by Julia tests) |

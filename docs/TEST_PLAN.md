@@ -83,6 +83,36 @@ Random tests use fixed seeds (StableRNG for new tests; E1 tests keep Xoshiro, AD
 | E6 | 95% CI for the edge covers the true edge in 94–96% of 10 000 replications at n = n_detect |
 | E7 | growth / Pr(halved) / median-final table for Kelly, KL-robust (ε = kl_radius_chi2, n ∈ {200, 1 000, 5 000}), Wasserstein L1 and L∞ (crash as unseen scenario, radius = 1% crash mass) across q ∈ {0, 0.005, 0.01, 0.02, 0.05}. Pass: (i) each Wasserstein bet's growth under the truth ≥ its certified worst-case growth − 1e-9 whenever the truth is inside its ball (q ≤ 0.01); (ii) the same for each KL bet at q = 0; (iii) KL-radius coverage D(π‖p̂) ≤ kl_radius_chi2(4, n) within ±2 pp of 95% for n ∈ {200, 1 000}; n = 50 reported only — the χ² radius is asymptotic and its coverage there (≈ 93.3%) sits on the band edge (Task 048) |
 
+### H. Box constraints (v0.2, ADR-012, DESIGN §10) — added 2026-11-11
+Residual ρ_u is DESIGN §10.2 (minimax ν*, ADR-013). "Oracle" means the committed fixtures
+`test/oracle/box_oracle.toml` from the offline cvxpy 1.9.3 + Clarabel 0.11.1 generator (ADR-014): read by
+Julia tests, no Python at test time. Fixture cases carry a `degenerate` flag (strict complementarity with
+margin 1e-6 fails). Tolerances follow ADR-014 and change only through an ADR. Random tests use StableRNG with
+fixed seeds. *(Amended 2026-11-11 for ADR-013…015; the earlier "(OQ-2)" markers are now fixed values.)*
+
+| ID | What | Inputs | Pass criterion |
+|---|---|---|---|
+| T-BOX-1 | Single bet, cap binds | p = 0.6, gross payoff 2, cash, `upper = [Inf, 0.1]` (unconstrained f* = 0.2) | `method == :clarabel` (conic dispatch, not greedy); bet stake `== 0.1` exactly and cash within 1e-15 of 0.9; ν = 98/99 within 1e-12; r_bet = 12/11 within 1e-12; ρ_u ≤ 1e-10 |
+| T-BOX-2 | Capped problems vs fixtures | every `kind = "allocation"` fixture (generated as: 200 models, S ≤ 64, J ≤ 10, with and without cash, caps U(0.02, 0.3) on a random subset of bets, feasible by construction, ≥ 1 binding cap per case) | library ρ_u ≤ 1e-10 for all; \|G − G_oracle\| ≤ 1e-10 for all; on non-degenerate fixtures also \|a − a_oracle\|∞ ≤ 1e-8 and library U/Z/F (τ_a = 1e-12) == stored U/Z/F (τ_o = 1e-8); degenerate fixtures: growth only |
+| T-BOX-3 | Minimax ν* | T-BOX-2 fixtures + library results | (i) every free j: \|r_j − ν*\| ≤ 1e-10; (ii) non-degenerate fixtures: \|ν* − ν*_oracle\| ≤ 1e-8; (iii) closed-form ν (test oracle, F ≠ ∅ and Σ_F a_j ≥ 0.01) agrees with ν* within 1e-9; (iv) ν* < 1 whenever a cap binds with r_j > 1; (v) hand cases: A = −∞ ⇒ ν* = B, B = +∞ ⇒ ν* = A, ν-part 0 when A or B infinite |
+| T-BOX-4 | No caps / non-binding caps | 100 models from T-ORC-5 and 100 single events | (i) `upper = nothing`, `upper = fill(Inf, J)` and caps all ≥ 1 give results `===`-identical to v0.1 (a, growth, kkt, method); (ii) finite caps 0.05 above the v0.1 stake (and < 1) give \|a − a_v0.1\|∞ ≤ 1e-10, U = ∅, \|ν* − 1\| ≤ 1e-9 (minimax residual, ADR-013: not bitwise 1) |
+| T-BOX-5 | Residual reduces to v0.1 | 500 random (X, a, π), a on and off the optimum | `kkt_residual(X, a, π; upper = nothing)` and with all-`Inf` caps are bitwise equal to the v0.1 expression (copied into the test as a frozen reference function) |
+| T-BOX-6 | Cash radius unchanged by caps (tests the Unverified claim of ADR-012) | 100 random models with cash, bet caps U(0.02, 0.3), D_min finite and > 1e-3 | `kl_cash_radius(m; upper) === kl_cash_radius(m)`; `kl_robust_allocation(m, 1.1·D_min; upper)` is all cash (certified); at 0.9·D_min cash < 1 − 1e-6 |
+| T-BOX-7 | KL-robust bet with binding caps | every `kind = "kl"` fixture (generated as: 100 random models with cash, ε ∈ [1e-3, 0.5], ε < D_min, ≥ 1 cap binding at the result) | saddle ρ_u(a*) under Q* ≤ 1e-10; \|D(Q*‖π) − ε\| ≤ 1e-10; worst-case growth vs the `kind = "kl"` fixtures within 1e-7 (as T-ORC-4; ADR-014); capped CRRA bet with γ = 1 + 1/λ* equals a* within 1e-8 (as T-ORC-6) |
+| T-BOX-8 | Invalid caps and feasibility threshold (ADR-013) | (a) no cash, Σu_j = 0.9 and Σu_j = 1 − 2e-12; (b) u_j = 0, u_j = −0.1, u_j = NaN; (c) wrong length; (d) finite cap on cash; (e) no cash, Σu_j = 1 − 5e-13 | (a)–(d) each throw `ArgumentError`, (a) message names Σ u_j; (e) validation does **not** throw; the solve uses the ADR-016 shortcut (T-BOX-16) |
+| T-BOX-9 | Wasserstein rejects caps | any model, `upper` = any vector (including all `Inf`) | `wasserstein_robust_allocation(m, 0.1; upper)` throws `ArgumentError` (not `MethodError`) |
+| T-BOX-10 | Polish bound handling | (a) warm start with a coordinate at its cap whose capped optimum is interior; (b) a capped model where an unheld asset has ν < r_j < 1 at the start | (a) the coordinate is released (a_j < u_j − 1e-9 at the result); (b) the asset is added (a_j > 0); both ρ_u ≤ 1e-10 |
+| T-BOX-11 | Projection onto A_u | 1 000 random x ∈ ℝ^J, random feasible u | result in A_u (feasibility terms of ρ_u ≤ 1e-15); idempotent; equals clamp.(x .− θ, 0, u) with θ found by an independent bisection in the test (the projection's exact characterization) within 1e-12 — no Python oracle needed |
+| T-BOX-12 | Free set empty (ADR-013) | no cash, π = (0.5, 0.3, 0.2), X = diag(3, 4, 6), u = (0.2, 0.3, 0.5), a = u | U = {1, 2, 3}, F = Z = ∅; A = −∞, B = 0.4; ρ_u == 0; ν* == 0.4 (within 1e-15); no division performed |
+| T-BOX-13 | Python parity with caps | capped `allocation` and `kl` cases added to `test/cases/cases.toml` by `scripts/fill_cases.jl` | pytest: abs ≤ 1e-10 on a, growth, worst-case growth, λ; `upper=None` default; invalid caps → `ValueError` |
+| T-BOX-14 | No regression (Success Criterion 1) | full suite, no caps | full `Pkg.test()` green; T-E1-2 byte-identical; `reproduce_all.jl` with `KELLY_KL_REFERENCE_HOST=1` ends `reproduce_all: PASS — 8 experiments, 23 files`; pytest parity ≤ 1e-10 on all pre-existing cases |
+| T-BOX-15 | Fixture integrity (ADR-014) | `test/oracle/box_oracle.toml` | header rejection rate ≤ 10%; every stored case recomputed in Julia has oracle ρ_u ≤ 1e-8 at τ_o = 1e-8 (allocation) or saddle ρ_u ≤ 1e-8 and \|D(Q*‖π) − ε\| ≤ 1e-8 (kl); stored `degenerate` flags reproduce from the stored a, r and ν* at margin 1e-6; header records seed and cvxpy/clarabel/Python versions; header `requirements_sha256` equals the SHA-256 of the committed `test/oracle/requirements.txt` (SHA stdlib) |
+| T-BOX-16 | Near-point shortcut (ADR-016) | no cash, J = 4, caps scaled so Σu ∈ {1 − 1e-12, 1 − 5e-13, 1, 1 + 5e-13, 1 + 1e-12}; plus Σu ∈ {1 + 2e-12, 1 + 1e-9} and Σu = 1 − 2e-12 | (a) in the band: `optimal_allocation` returns method `:single_point`, a == u ./ sum(u) bitwise, ρ_u ≤ 1e-11; (b) in the band: `kl_robust_allocation` for ε ∈ {0, 0.01, 10} returns the same a bitwise, `certificate == :kkt`, kkt ≤ 1e-11, `worst_case_growth == kl_worst_case(m, a, ε)[1]` bitwise; (c) outside the band (1 + 2e-12, 1 + 1e-9): conic path (method `:clarabel`), ρ_u ≤ 1e-10 — a failure here triggers a new ADR, not a tolerance change; (d) Σu = 1 − 2e-12 → `ArgumentError` |
+
+Note on T-BOX-14: the brief counts "21 E1–E7 reference outputs". `experiments/reference/` holds 23 files on
+2026-11-11 (22 from E1–E7 plus `e8_demere.csv`), and Task 063's criterion is "8 experiments, 23 files". The
+criterion above uses the current count.
+
 ## Definition of Pass
 All of the following, on John's machine with the pinned Manifest:
 1. `Pkg.test()` exits 0 with the full (non-quick) stress test; every A–D test green (T-ERR-1 removed per PLAN).
@@ -90,6 +120,8 @@ All of the following, on John's machine with the pinned Manifest:
 3. `pytest python/tests` exits 0 (T-PY-1..3).
 4. `reproduce_all.jl` exits 0 (T-REP-1) and T-REP-2 passes.
 5. Aqua passes; coverage of `src/` ≥ 85% is reported (a drop below triggers review, not automatic failure).
+6. (v0.2) T-BOX-1…16 green; the certification hook recomputes every capped result with `result.upper`
+   and reports 0 results with ρ_u > 1e-10.
 
 ## Failure Protocol
 Per AGENTS.md Part 8 (Diagnostic Protocol): Antigravity **stops** making changes, reports the
