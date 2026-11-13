@@ -25,19 +25,29 @@ function _simplex_value(a)
     return a_val ./ sum(a_val)
 end
 
-function solve_conic(m::ScenarioModel; solver::Symbol = :clarabel)
+function solve_conic(m::ScenarioModel; solver::Symbol = :clarabel, upper = nothing)
+    u = _normalize_upper(m, upper)
+    if u !== nothing && !m.has_cash && abs(sum(u) - 1) ≤ BOX_FEAS_TOL
+        throw(ArgumentError("near-point caps (|Σu − 1| ≤ 1e-12): use optimal_allocation (ADR-016)"))
+    end
     J = size(m.X, 2)
     pos = findall(>(0.0), m.π)                       # scenarios with π_s = 0 are excluded
     model = _conic_model(solver)
     @variable(model, a[1:J] >= 0)
     @variable(model, t[1:length(pos)])
     @constraint(model, sum(a) == 1)
+    if u !== nothing
+        for j in 1:J
+            isfinite(u[j]) && @constraint(model, a[j] <= u[j])
+        end
+    end
     for (k, s) in enumerate(pos)
         @constraint(model, [t[k], 1.0, sum(m.X[s, j] * a[j] for j in 1:J)] in MOI.ExponentialCone())  # t_s ≤ log V_s(a)
     end
     @objective(model, Max, sum(m.π[s] * t[k] for (k, s) in enumerate(pos)))
     JuMP.optimize!(model)
     _check_optimal(model, "conic solve failed (:$solver)")
-    return _simplex_value(a)
+    u === nothing && return _simplex_value(a)
+    return _project_capped(max.(JuMP.value.(a), 0.0), u)
 end
 
