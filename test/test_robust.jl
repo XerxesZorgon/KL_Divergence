@@ -90,6 +90,43 @@ end
     @test_throws ArgumentError kl_cash_radius(single_event([0.5, 0.5], [2.0, 2.0]; cash = false))
 end
 
+@testset "T-BOX-6 cash radius with caps, first clause (Task 073)" begin
+    rng = StableRNG(73)
+    models = ScenarioModel[]; draws = 0; skipped_cert = 0
+    while length(models) < 100 && draws < 2000
+        draws += 1
+        m = rand_correlated_model(rng)
+        m.has_cash || continue
+        r = try
+            kl_cash_radius(m)[1]
+        catch e
+            e isa CertificationError ? (skipped_cert += 1; continue) : rethrow()
+        end
+        (isfinite(r) && r > 1e-3) || continue
+        push!(models, m)
+    end
+    println("T-BOX-6 clause 1: draws = ", draws, ", skipped_cert = ", skipped_cert, ", collected = ", length(models))
+    @test length(models) == 100
+    for m in models
+        J = size(m.X, 2)
+        u = fill(Inf, J)
+        for j in 2:J
+            u[j] = 0.02 + 0.28 * rand(rng)
+        end
+        (r0, Q0) = kl_cash_radius(m)
+        (r1, Q1) = kl_cash_radius(m; upper = u)
+        # Tuples of arrays are never `===` (arrays compare by identity), so `r1 === r0` (scalar, bitwise)
+        # together with `Q1 == Q0` (elementwise) is the bitwise check.
+        @test r1 === r0
+        @test Q1 == Q0
+    end
+    if !isempty(models)
+        m = first(models); J = size(m.X, 2)
+        @test_throws ArgumentError kl_cash_radius(m; upper = [0.5; fill(Inf, J - 1)])
+        @test_throws ArgumentError kl_cash_radius(m; upper = fill(Inf, J - 1))
+    end
+end
+
 @testset "robust: KL-robust bet (T-ORC-6, T-ORC-10)" begin
     # (a) Analytic single bet
     m_a = correlated_bets([0.6, 0.4], [2.0; 0.0;;])

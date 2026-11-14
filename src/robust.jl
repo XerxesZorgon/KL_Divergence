@@ -72,16 +72,18 @@ function kl_inner_direct(m::ScenarioModel, a::AbstractVector{<:Real}, ε::Real)
 end
 
 """
-    kl_cash_radius(m::ScenarioModel; maxit = 2000, tol = 1e-13) -> (radius, Q)
+    kl_cash_radius(m::ScenarioModel; maxit = 2000, tol = 1e-13, upper = nothing) -> (radius, Q)
 
 KL distance from `m` to the nearest "no-edge" world (`E_Q[X_j] ≤ 1` for every bet column),
 measuring the KL robustness margin of the edge. `radius = 0` means Kelly already holds only
 cash; `radius = Inf` means no `Q` in any KL ball removes every edge, so the KL-robust bet
 never goes to all cash. Projected Newton on the dual; `Inf` is returned only with a proof;
 an undecidable, nearly degenerate model throws `CertificationError`.
+`upper` is validated (ADR-012) but does not change the result: at the all-cash point no bet cap binds (T-BOX-6).
 """
-function kl_cash_radius(m::ScenarioModel; maxit = 2000, tol = 1e-13)
+function kl_cash_radius(m::ScenarioModel; maxit = 2000, tol = 1e-13, upper = nothing)
     m.has_cash || throw(ArgumentError("kl_cash_radius needs a model with cash"))
+    _normalize_upper(m, upper)   # validation only; result discarded
     pos = findall(>(0.0), m.π); p = m.π[pos]
     Y = m.X[pos, 2:end] .- 1.0; n = size(Y, 2); μ = zeros(n)
     φ(μ) = (z = -(Y * μ) .+ log.(p); mz = maximum(z); -(mz + log(sum(exp.(z .- mz)))))   # concave dual; = D_min at the optimum
