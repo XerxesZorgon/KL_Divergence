@@ -3723,7 +3723,7 @@ Error: <full output>
 
 ## Task 077: Docstrings and README section on caps (depth and exit examples, meaning of ν* and shadow prices); ADR-015 diagnostics docstrings
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 076
+**Status:** [x] Done (2026-11-14, commit e5b7f7d; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 076
 
 ### What to do
 
@@ -3749,7 +3749,7 @@ Error: <full output>
 
 ## Task 078: Full regression gate (Success Criterion 1)
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 077
+**Status:** [x] Done (run only, 2026-11-14, no commit; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 077
 
 ### What to do
 
@@ -3774,7 +3774,7 @@ Error: <full output>
 
 ## Task 079: Release 0.2.0
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 078
+**Status:** [x] Done (2026-11-14, tag v0.2.0; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 078
 
 ### What to do
 

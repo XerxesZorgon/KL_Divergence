@@ -1,6 +1,6 @@
 name = "Kelly_KL"
 uuid = "d77dea87-facc-4bb2-8fb0-b1a3e0c8f896"
-version = "0.1.0"
+version = "0.2.0"
 authors = ["John Peach"]
 
 [deps]

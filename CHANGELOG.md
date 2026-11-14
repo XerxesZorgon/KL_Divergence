@@ -4,6 +4,34 @@ All notable changes to Kelly_KL.jl are recorded here, following
 completed task (AGENTS.md Part 7).
 
 ## [Unreleased]
+
+## [0.2.0] — 2026-11-14
+### Added
+- Per-asset upper bounds `upper` on `optimal_allocation`, `kl_robust_allocation`, `kl_cash_radius` (validation only), `kkt_residual`, `solve_conic` and `polish_crra` (ADR-012).
+- `kkt_components`, which returns ρ, ν* and the capped/zero/free sets (minimax residual, ADR-013).
+- Near-point shortcut, `method = :single_point` (ADR-016).
+- Oracle fixtures and their generator (ADR-014).
+- Python `upper=` and `kkt_components`.
+- README section on caps: depth, exits, shadow prices.
+
+### Changed
+- `BetResult` and `RobustResult` gain a last field `upper`. Old positional constructors still work in Julia; the Python dataclasses gain a field.
+- Any finite cap routes `:single_event` models to the conic path.
+- ADR-014's growth tolerance is case-specific (1e-10 + 3·ρ_u of the oracle).
+- Diagnostics take no caps (ADR-015).
+- `wasserstein_robust_allocation` rejects `upper`.
+
+### Fixed
+- KL λ search: a stalled warm-started polish could drive the bisection to λ ≈ 1e-7 and throw `CertificationError` for models with a large cash radius. A safeguarded fallback was added; results where the original search succeeded are unchanged bitwise (Fix 074a, ADR-005 amendment).
+- `docs/SDD.md` editor damage repaired (Fix 064a).
+
+### Tasks
+- Tasks 064–079 plus Fixes 064a and 074a; ADRs 012–016.
+
+### Verification
+- The full suite, `reproduce_all` (8 experiments, 23 files) and pytest pass on Julia 1.12.1 / Python 3.14.10; `src/` coverage is 98.6%.
+
+## [0.1.0] — 2026-11-04
 ### Added
 - [Docs] Planning documents: `docs/SDD.md`, `docs/adr/ADR-001` … `ADR-011`, `docs/DESIGN.md`,
   `docs/TEST_PLAN.md`, `docs/PLAN.md`, `README.md`, `CHANGELOG.md` (2026-11-01).

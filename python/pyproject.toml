@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kelly_kl"
-version = "0.1.0"
+version = "0.2.0"
 description = "Python wrapper for the Julia package Kelly_KL (exact, certified Kelly bets; KL and Wasserstein robust bets)"
 authors = [{ name = "John Peach" }]
 requires-python = ">=3.11"

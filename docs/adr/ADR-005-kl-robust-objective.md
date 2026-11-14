@@ -49,6 +49,7 @@ Implemented as: cash test via the no-edge I-projection (`kl_cash_radius`: robust
 With caps, the saddle-point certificate uses the generalized residual ρ_u (DESIGN.md §10.2) under Q*,
 and the joint program adds a_j ≤ u_j. The CRRA equivalence holds unchanged over A_u. The cash test is
 claimed unchanged (no cap is active at all-cash); this claim is Unverified until T-BOX-6 passes.
+Amendment 2026-11-14 (Task 079): verified by T-BOX-6 (Tasks 073–074).
 
 
 **Amendment 2026-11-13 (Fix 074a).** The λ search chained warm starts through `polish_crra` without checking its residual. A stalled polish at large k = 1/λ returned a near-riskless allocation with D ≈ 0, which drove the bisection to λ ≈ 1e-7 (model 84 of T-BOX-6, ε ≥ 0.7·D_min; true λ* = 0.04364, conic seed within 1e-4). v0.1 never returned an uncertified bet because the final check threw. Fix: if any intermediate polish has ρ > tol or a final check fails, rerun the search with every polish started from the conic seed or the last converged allocation, and a geometric bracket (×1.25) around the seed. Results where the original search succeeds are unchanged bitwise.
