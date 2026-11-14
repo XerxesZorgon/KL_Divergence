@@ -138,7 +138,7 @@ function kl_cash_radius_direct(m::ScenarioModel)
     return st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) ? (JuMP.objective_value(model), st) : (Inf, st)
 end
 
-function kl_robust_conic(m::ScenarioModel, ε::Real; solver::Symbol = :clarabel)
+function kl_robust_conic(m::ScenarioModel, ε::Real; solver::Symbol = :clarabel, upper = nothing)
     pos = findall(>(0.0), m.π); p = m.π[pos]; Xp = m.X[pos, :]; S_pos = length(pos); J = size(m.X, 2)
     model = _conic_model(solver)
     @variable(model, a[1:J] >= 0)
@@ -147,6 +147,11 @@ function kl_robust_conic(m::ScenarioModel, ε::Real; solver::Symbol = :clarabel)
     @variable(model, w[1:S_pos])
     @variable(model, z[1:S_pos])
     @constraint(model, sum(a) == 1)
+    if upper !== nothing
+        for j in 1:J
+            isfinite(upper[j]) && @constraint(model, a[j] <= upper[j])
+        end
+    end
     @constraint(model, sum(p[s] * z[s] for s in 1:S_pos) <= λ)
     for s in 1:S_pos
         @constraint(model, [t - w[s], λ, z[s]] in MOI.ExponentialCone())
@@ -155,18 +160,24 @@ function kl_robust_conic(m::ScenarioModel, ε::Real; solver::Symbol = :clarabel)
     @objective(model, Max, t - λ * Float64(ε))
     JuMP.optimize!(model)
     _check_optimal(model, "kl_robust_conic solve failed (:$solver)")
-    return (_simplex_value(a), JuMP.value(λ))
+    upper === nothing && return (_simplex_value(a), JuMP.value(λ))
+    return (_project_capped(max.(JuMP.value.(a), 0.0), upper), JuMP.value(λ))
 end
 
 """
-    kl_robust_allocation(m::ScenarioModel, ε; solver = :clarabel, tol = CERT_TOL) -> RobustResult
+    kl_robust_allocation(m::ScenarioModel, ε; solver = :clarabel, tol = CERT_TOL, upper = nothing) -> RobustResult
 
 The bet maximizing worst-case expected log growth over the KL ball `{Q : D(Q‖π) ≤ ε}`;
 equals the CRRA bet with `γ = 1 + 1/λ*`; all cash exactly when `ε ≥ kl_cash_radius(m)`;
 a model without cash whose `λ* → 0` throws `CertificationError` (v1 limit).
+`upper` gives per-asset caps `a_j ≤ upper[j]` (ADR-012; `Inf` = uncapped). When the caps leave a
+single feasible point (no cash, `|Σu − 1| ≤ 1e-12`) that point is returned with a saddle
+certificate and no boundary check (ADR-016). The all-cash rule is unchanged by caps (ADR-012, T-BOX-6).
 """
-function kl_robust_allocation(m::ScenarioModel, ε::Real; solver::Symbol = :clarabel, tol = CERT_TOL)
+function kl_robust_allocation(m::ScenarioModel, ε::Real; solver::Symbol = :clarabel, tol = CERT_TOL, upper = nothing)
     (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("kl_robust_allocation requires finite ε ≥ 0, got $ε"))
+    u = _normalize_upper(m, upper)
+    u === nothing || return _kl_robust_capped(m, ε, u; solver, tol)
     pos = findall(>(0.0), m.π); p = m.π[pos]; Xp = m.X[pos, :]; J = size(m.X, 2); εf = Float64(ε)
     if εf == 0.0
         r = optimal_allocation(m; solver, tol)
@@ -265,6 +276,34 @@ function _kl_lambda_search(m, Xp, p, εf, a, λ0; tol, upper = nothing)
         res.err === nothing && return (res.a, res.λ, res.ρ, res.Q, res.V)
         throw(res.err)
     end
+end
+
+# Capped path of kl_robust_allocation (Task 074); `u` is already normalized (Vector{Float64} with finite caps < 1).
+function _kl_robust_capped(m::ScenarioModel, ε::Real, u::Vector{Float64}; solver::Symbol, tol)
+    pos = findall(>(0.0), m.π); p = m.π[pos]; Xp = m.X[pos, :]; J = size(m.X, 2); εf = Float64(ε)
+    if _near_point(m, u)                            # ADR-016: single feasible point, no boundary check
+        a = u ./ sum(u)
+        (v, λ, Q) = kl_worst_case(m, a, εf)
+        ρ = kkt_residual(Xp, a, Q; upper = u)
+        ρ ≤ tol || throw(CertificationError(ρ, tol, :kl, "single-point certificate"))
+        return RobustResult(a, v, growth(m, a), λ, Q, Xp, ρ, :kl, εf, :kkt, u)
+    end
+    if εf == 0.0
+        r = optimal_allocation(m; solver, tol, upper = u)
+        return RobustResult(r.a, r.growth, r.growth, Inf, p, Xp, r.kkt, :kl, 0.0, :kkt, u)
+    end
+    if m.has_cash
+        (D_min, Qc) = kl_cash_radius(m)
+        if εf ≥ D_min
+            a = [1.0; zeros(J - 1)]
+            ρ = kkt_residual(Xp, a, Qc; upper = u)
+            ρ ≤ tol || throw(CertificationError(ρ, tol, :kl, "cash certificate"))
+            return RobustResult(a, 0.0, 0.0, 0.0, Qc, Xp, ρ, :kl, εf, :kkt, u)
+        end
+    end
+    (a, λ0) = kl_robust_conic(m, εf; solver, upper = u)
+    (a, λ, ρ, Q, V) = _kl_lambda_search(m, Xp, p, εf, a, λ0; tol, upper = u)
+    return RobustResult(a, sum(Q .* log.(V)), growth(m, a), λ, Q, Xp, ρ, :kl, εf, :kkt, u)
 end
 
 function wasserstein_support(m::ScenarioModel, unseen, cost)

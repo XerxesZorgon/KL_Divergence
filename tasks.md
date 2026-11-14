@@ -3587,7 +3587,7 @@ Error: <full output>
 
 ## Task 072: Fixture reader and oracle tests
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 071
+**Status:** [x] Done (2026-11-13, commit 3637e18; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 071
 
 ### What to do
 
@@ -3614,7 +3614,7 @@ Error: <full output>
 
 ## Task 073: `kl_cash_radius(...; upper)` (validation only)
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 072
+**Status:** [x] Done (2026-11-13, commit 2ce3787; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 072
 
 ### What to do
 
@@ -3637,6 +3637,8 @@ Criterion: <criterion text>
 Observed: <what happened>
 Error: <full output>
 ```
+
+Fix 074a: [x] Done (2026-11-14, commit 1b4b93a; Agent: Claude Code 2.1.228) — safeguarded KL λ search (ADR-005 amendment)
 
 ## Task 074: Caps in `kl_robust_conic` and `kl_robust_allocation` (ε = 0 path, cash path, λ search, saddle certificate with minimax ρ_u)
 
@@ -3725,7 +3727,7 @@ Error: <full output>
 
 ### What to do
 
-Docstrings and README section on caps (depth and exit examples, meaning of ν* and shadow prices); ADR-015 diagnostics docstrings. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures. Also update DESIGN.md §10 polish row: _project_snap fast path (Task 069).
+Docstrings and README section on caps (depth and exit examples, meaning of ν* and shadow prices); ADR-015 diagnostics docstrings. Follow ADR-012…016, DESIGN.md §10 and TEST_PLAN.md §H exactly; the instruction for this task gives the exact function names and signatures. Also update DESIGN.md §10 polish row: _project_snap fast path (Task 069). Also document in the kl_robust_allocation docstring: if both λ-search passes fail, the primary pass's error is rethrown (Fix 074a); and change ADR-012 / DESIGN §10 cash-radius claim from Unverified to "verified by T-BOX-6" if Task 074 passes.
 
 ### Files touched
 

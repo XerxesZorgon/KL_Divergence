@@ -280,6 +280,102 @@ end
     @test_throws ArgumentError kl_radius_chi2(3, 10; level = 1.0)
 end
 
+@testset "T-BOX-6/7/16 kl_robust_allocation with caps (Task 074)" begin
+    # T-BOX-6 clauses 2-3: the same 100 models and caps as the Task 073 testset (StableRNG(73) recipe)
+    rng = StableRNG(73)
+    models = ScenarioModel[]; draws = 0
+    while length(models) < 100 && draws < 2000
+        draws += 1
+        m = rand_correlated_model(rng)
+        m.has_cash || continue
+        r = try
+            kl_cash_radius(m)[1]
+        catch e
+            e isa CertificationError ? continue : rethrow()
+        end
+        (isfinite(r) && r > 1e-3) || continue
+        push!(models, m)
+    end
+    @test length(models) == 100
+    for (idx, m) in enumerate(models)
+        J = size(m.X, 2)
+        u = fill(Inf, J)
+        for j in 2:J
+            u[j] = 0.02 + 0.28 * rand(rng)
+        end
+        D_min = kl_cash_radius(m)[1]
+        r1 = kl_robust_allocation(m, 1.1 * D_min; upper = u)
+        ok1 = r1.a == [1.0; zeros(J - 1)] && r1.kkt ≤ 1e-10
+        ok1 || println("  T-BOX-6 model ", idx, " at 1.1·D_min: a[1] = ", r1.a[1], ", kkt = ", r1.kkt, ", D_min = ", D_min)
+        @test ok1
+        r0 = kl_robust_allocation(m, 0.9 * D_min; upper = u)
+        ok0 = r0.a[1] < 1 - 1e-6 && r0.kkt ≤ 1e-10
+        ok0 || println("  T-BOX-6 model ", idx, " at 0.9·D_min: a[1] = ", r0.a[1], ", kkt = ", r0.kkt, ", D_min = ", D_min)
+        @test ok0
+    end
+
+    # T-BOX-7: kl fixtures
+    _, _, kl_cases = load_box_oracle(joinpath(@__DIR__, "oracle", "box_oracle.toml"))
+    max_dg = 0.0; max_da = 0.0
+    for c in kl_cases
+        m = model_of(c)
+        r = kl_robust_allocation(m, c.eps; upper = c.upper)
+        dg = abs(r.worst_case_growth - c.worst_case_growth)
+        a2, _ = polish_crra(m.X, m.π, Kelly_KL.solve_conic(m; upper = r.upper), 1 / r.λ; upper = r.upper)
+        da = maximum(abs.(a2 .- r.a))
+        dd = abs(Kelly_KL.kl(r.Q, m.π[m.π .> 0]) - c.eps)
+        max_dg = max(max_dg, dg); max_da = max(max_da, da)
+        ok = r.kkt ≤ 1e-10 && dd ≤ 1e-10 && dg ≤ 1e-7 && da ≤ 1e-8
+        ok || println("  T-BOX-7 fixture ", c.id, ": kkt = ", r.kkt, ", |D−ε| = ", dd, ", |ΔG_wc| = ", dg, ", |a2−a| = ", da)
+        @test r.kkt ≤ 1e-10
+        @test dd ≤ 1e-10
+        @test dg ≤ 1e-7
+        @test da ≤ 1e-8
+    end
+    println("T-BOX-7: ", length(kl_cases), " kl fixtures; max |ΔG_wc| = ", max_dg, ", max |a2 − a| = ", max_da)
+
+    # T-BOX-16(b): single-point shortcut, no cash (model and u0 of the Task 070 test)
+    rng16 = StableRNG(716)
+    X16 = 1 .+ 3 .* rand(rng16, 6, 4)
+    π16 = rand_simplex(rng16, 6)
+    m16 = ScenarioModel(π16, X16; assets = ["b1", "b2", "b3", "b4"], has_cash = false, structure = :correlated)
+    u0 = [0.3, 0.25, 0.25, 0.2]
+    for target in (1 - 1e-12, 1 - 5e-13, 1.0, 1 + 5e-13, 1 + 0.999e-12)
+        u = u0 .* target
+        for ε in (0.0, 0.01, 10.0)
+            r = kl_robust_allocation(m16, ε; upper = u)
+            @test r.a == u ./ sum(u)
+            @test r.certificate === :kkt
+            @test r.kkt ≤ 1e-11
+            @test r.worst_case_growth === kl_worst_case(m16, r.a, ε)[1]
+        end
+    end
+
+    # uncapped unchanged
+    rng41 = StableRNG(741)
+    cnt = 0
+    while cnt < 20
+        m = rand_correlated_model(rng41)
+        m.has_cash || continue
+        D_min = try
+            kl_cash_radius(m)[1]
+        catch e
+            e isa CertificationError ? continue : rethrow()
+        end
+        (isfinite(D_min) && D_min > 1e-3) || continue
+        cnt += 1
+        J = size(m.X, 2); ε = 0.5 * D_min
+        r = kl_robust_allocation(m, ε)
+        for up in (nothing, fill(Inf, J))
+            rr = kl_robust_allocation(m, ε; upper = up)
+            @test rr.a == r.a
+            @test rr.λ === r.λ
+            @test rr.worst_case_growth === r.worst_case_growth
+            @test rr.kkt === r.kkt
+        end
+    end
+end
+
 
 
 
