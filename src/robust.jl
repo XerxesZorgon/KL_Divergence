@@ -433,15 +433,17 @@ function wasserstein_robust_conic(m::ScenarioModel, ε::Real, Xs::Matrix{Float64
 end
 
 """
-    wasserstein_robust_allocation(m::ScenarioModel, ε; unseen = zeros(0, size(m.X, 2)), cost = :l1, solver = :clarabel, tol = CERT_TOL, gap_tol = GAP_TOL) -> RobustResult
+    wasserstein_robust_allocation(m::ScenarioModel, ε; unseen = zeros(0, size(m.X, 2)), cost = :l1, solver = :clarabel, tol = CERT_TOL, gap_tol = GAP_TOL, upper = nothing) -> RobustResult
 
 Maximizes worst-case growth when an adversary may move mass (including onto `unseen` scenarios)
 at transport cost `≤ ε`; tied worst cases are certified by a duality gap `≤ gap_tol` instead of
-a KKT residual (ADR-006, exception).
+a KKT residual (ADR-006, exception). `upper` is not supported in v0.2: any value other than
+`nothing` throws `ArgumentError`.
 """
 function wasserstein_robust_allocation(m::ScenarioModel, ε::Real;
                                        unseen = zeros(0, size(m.X, 2)), cost = :l1,
-                                       solver::Symbol = :clarabel, tol = CERT_TOL, gap_tol = GAP_TOL)
+                                       solver::Symbol = :clarabel, tol = CERT_TOL, gap_tol = GAP_TOL, upper = nothing)
+    upper === nothing || throw(ArgumentError("wasserstein_robust_allocation does not support caps (upper) in v0.2; see DESIGN §10"))
     (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("wasserstein_robust_allocation requires finite ε ≥ 0, got $ε"))
     (Xs, Xt, C, p) = wasserstein_support(m, unseen, cost)
     εf = Float64(ε)

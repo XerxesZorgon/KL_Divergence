@@ -432,3 +432,14 @@ end
     end
     println("Fix 074a control models: fallback ran on ", Kelly_KL._KL_FALLBACK_COUNT[] - fb0, "/20")
 end
+
+@testset "T-BOX-9 Wasserstein rejects caps (Task 075)" begin
+    m = simultaneous_bets([0.3, 0.25], [4.0, 6.0]); J = size(m.X, 2)
+    for u in (fill(Inf, J), [Inf; fill(0.2, J - 1)], fill(2.0, J), [0.5])
+        @test_throws ArgumentError wasserstein_robust_allocation(m, 0.1; upper = u)
+    end
+    r0 = wasserstein_robust_allocation(m, 0.1)
+    r1 = wasserstein_robust_allocation(m, 0.1; upper = nothing)
+    @test r1.a == r0.a
+    @test r1.worst_case_growth === r0.worst_case_growth
+end

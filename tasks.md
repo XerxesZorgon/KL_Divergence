@@ -3642,7 +3642,7 @@ Fix 074a: [x] Done (2026-11-14, commit 1b4b93a; Agent: Claude Code 2.1.228) — 
 
 ## Task 074: Caps in `kl_robust_conic` and `kl_robust_allocation` (ε = 0 path, cash path, λ search, saddle certificate with minimax ρ_u)
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 073
+**Status:** [x] Done (2026-11-14, commit 22549d7; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 073
 
 ### What to do
 
