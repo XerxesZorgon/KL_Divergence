@@ -182,14 +182,28 @@ function kl_robust_allocation(m::ScenarioModel, ε::Real; solver::Symbol = :clar
         end
     end
     (a, λ0) = kl_robust_conic(m, εf; solver)
+    (a, λ, ρ, Q, V) = _kl_lambda_search(m, Xp, p, εf, a, λ0; tol)
+    return RobustResult(a, sum(Q .* log.(V)), growth(m, a), λ, Q, Xp, ρ, :kl, εf, :kkt)
+end
+
+# Test hook (Fix 074a): number of times the safeguarded fallback pass ran.
+const _KL_FALLBACK_COUNT = Ref(0)
+
+# Primary pass: the original warm-started search. Returns a NamedTuple; `stalled` records any polish with ρ > tol,
+# `err` is the CertificationError the original code would have thrown (or `nothing`).
+function _kl_search_primary(m, Xp, p, εf, a, λ0, tol, upper)
+    stalled = false
     function Dλ(λ)                                  # re-optimize the CRRA bet at λ, warm-started, and return D(Q‖π)
-        a .= polish_crra(m.X, m.π, a, 1 / λ; tol)[1]
+        (a_new, ρ_new) = polish_crra(m.X, m.π, a, 1 / λ; tol, upper)
+        ρ_new > tol && (stalled = true)
+        a .= a_new
         Q, _ = crra_weights(Xp, p, a, 1 / λ)
         return kl(Q, p)
     end
+    fail(err) = (a = a, λ = NaN, ρ = NaN, Q = p, V = p, stalled = stalled, err = err)
     lo, hi = λ0 / 2, 2λ0
-    n = 0; while Dλ(lo) ≤ εf; lo /= 2; (n += 1) > 60 && throw(CertificationError(Inf, tol, :kl, "no lower bracket for λ*")); end
-    n = 0; while Dλ(hi) > εf; hi *= 2; (n += 1) > 60 && throw(CertificationError(Inf, tol, :kl, "no upper bracket for λ*")); end
+    n = 0; while Dλ(lo) ≤ εf; lo /= 2; (n += 1) > 60 && return fail(CertificationError(Inf, tol, :kl, "no lower bracket for λ*")); end
+    n = 0; while Dλ(hi) > εf; hi *= 2; (n += 1) > 60 && return fail(CertificationError(Inf, tol, :kl, "no upper bracket for λ*")); end
     l, h = log(lo), log(hi)
     for _ in 1:200
         mid = (l + h) / 2
@@ -197,12 +211,60 @@ function kl_robust_allocation(m::ScenarioModel, ε::Real; solver::Symbol = :clar
         h - l < 1e-13 && break
     end
     λ = exp((l + h) / 2)
-    a, ρ = polish_crra(m.X, m.π, a, 1 / λ; tol)
+    a, ρ = polish_crra(m.X, m.π, a, 1 / λ; tol, upper)
+    Q, V = crra_weights(Xp, p, a, 1 / λ)
+    ρ ≤ tol || return fail(CertificationError(ρ, tol, :kl, "saddle-point KKT residual $ρ > $tol"))
+    d_err = abs(kl(Q, p) - εf)
+    d_err ≤ tol || return fail(CertificationError(d_err, tol, :kl, "KL boundary residual $d_err > $tol"))
+    return (a = a, λ = λ, ρ = ρ, Q = Q, V = V, stalled = stalled, err = nothing)
+end
+
+# Fallback pass: never chains warm starts through a failed polish; geometric ×1.25 bracket around the conic seed.
+function _kl_search_fallback(m, Xp, p, εf, a_seed, λ0, tol, upper)
+    a_good = copy(a_seed)
+    function Dsafe(λ)
+        k = 1 / λ
+        (a_new, ρ) = polish_crra(m.X, m.π, a_seed, k; tol, upper)
+        if ρ > tol
+            (a_new, ρ) = polish_crra(m.X, m.π, a_good, k; tol, upper)
+            ρ > tol && throw(CertificationError(ρ, tol, :kl, "λ search: polish failed at λ = $λ"))
+        end
+        a_good = a_new
+        Q, _ = crra_weights(Xp, p, a_good, k)
+        return kl(Q, p)
+    end
+    lo, hi = λ0 / 1.25, λ0 * 1.25
+    n = 0; while Dsafe(lo) ≤ εf; lo /= 1.25; (n += 1) > 200 && throw(CertificationError(Inf, tol, :kl, "no bracket for λ*")); end
+    n = 0; while Dsafe(hi) > εf; hi *= 1.25; (n += 1) > 200 && throw(CertificationError(Inf, tol, :kl, "no bracket for λ*")); end
+    l, h = log(lo), log(hi)
+    for _ in 1:200
+        mid = (l + h) / 2
+        Dsafe(exp(mid)) > εf ? (l = mid) : (h = mid)
+        h - l < 1e-13 && break
+    end
+    λ = exp((l + h) / 2)
+    a, ρ = polish_crra(m.X, m.π, a_good, 1 / λ; tol, upper)
     Q, V = crra_weights(Xp, p, a, 1 / λ)
     ρ ≤ tol || throw(CertificationError(ρ, tol, :kl, "saddle-point KKT residual $ρ > $tol"))
     d_err = abs(kl(Q, p) - εf)
     d_err ≤ tol || throw(CertificationError(d_err, tol, :kl, "KL boundary residual $d_err > $tol"))
-    return RobustResult(a, sum(Q .* log.(V)), growth(m, a), λ, Q, Xp, ρ, :kl, εf, :kkt)
+    return (a, λ, ρ, Q, V)
+end
+
+# λ search of ADR-005 with the Fix 074a safeguard (ADR-005 amendment 2026-11-13). Returns (a, λ, ρ, Q, V).
+function _kl_lambda_search(m, Xp, p, εf, a, λ0; tol, upper = nothing)
+    a_seed = copy(a)
+    res = _kl_search_primary(m, Xp, p, εf, a, λ0, tol, upper)
+    (res.err === nothing && !res.stalled) && return (res.a, res.λ, res.ρ, res.Q, res.V)
+    _KL_FALLBACK_COUNT[] += 1
+    try
+        return _kl_search_fallback(m, Xp, p, εf, a_seed, λ0, tol, upper)
+    catch e
+        e isa CertificationError || rethrow()
+        # the fallback failed too: keep the original behaviour (a certified primary result is returned, otherwise the original error)
+        res.err === nothing && return (res.a, res.λ, res.ρ, res.Q, res.V)
+        throw(res.err)
+    end
 end
 
 function wasserstein_support(m::ScenarioModel, unseen, cost)

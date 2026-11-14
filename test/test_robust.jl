@@ -1,5 +1,7 @@
 using StableRNGs, Random, Distributions
 using Kelly_KL: kl_cash_radius_direct, greedy_allocation, polish_crra, wasserstein_inner_lp
+import JuMP
+import MathOptInterface as MOI
 
 @testset "robust: KL worst case (T-ORC-4, T-ORC-7)" begin
     # T-ORC-4, seed 1601
@@ -281,3 +283,56 @@ end
 
 
 
+
+@testset "Fix 074a safeguarded λ search" begin
+    # model 84 of the T-BOX-6 draw (StableRNG(73)), uncapped; copied with full precision
+    π84 = [0.07136346342659079, 0.007476906034825119, 0.7663115227991835, 0.15484810773940055]
+    X84 = [1.0 2.683524870969485 0.0 0.0 1.9720652904384073 0.0; 1.0 0.0 0.0 0.0 0.0 0.0; 1.0 4.446691684308016 1.5473295361924109 0.0 3.3232896413528072 3.2240975149918247; 1.0 0.0 0.0 0.0 2.2969988383777684 2.7320440246679993]
+    m84 = ScenarioModel(π84, X84; assets = ["cash", "bet_1", "bet_2", "bet_3", "bet_4", "bet_5"], has_cash = true, structure = :correlated)
+    D_min = kl_cash_radius(m84)[1]
+    p84 = m84.π[m84.π .> 0]
+    function tight_lambda(m, ε)                       # true λ* from the conic program at tight tolerance (diagnostic step 4)
+        pos = findall(>(0.0), m.π); p = m.π[pos]; Xp = m.X[pos, :]; S = length(pos); J = size(m.X, 2)
+        model = Kelly_KL._tight_clarabel_model()
+        JuMP.@variable(model, a[1:J] >= 0); JuMP.@variable(model, λ >= 0); JuMP.@variable(model, t)
+        JuMP.@variable(model, w[1:S]); JuMP.@variable(model, z[1:S])
+        JuMP.@constraint(model, sum(a) == 1)
+        JuMP.@constraint(model, sum(p[s] * z[s] for s in 1:S) <= λ)
+        for s in 1:S
+            JuMP.@constraint(model, [t - w[s], λ, z[s]] in MOI.ExponentialCone())
+            JuMP.@constraint(model, [w[s], 1.0, sum(Xp[s, j] * a[j] for j in 1:J)] in MOI.ExponentialCone())
+        end
+        JuMP.@objective(model, Max, t - λ * ε)
+        JuMP.optimize!(model)
+        return (JuMP.value(λ), JuMP.objective_value(model))   # (λ_c, v_c = t − λ_c ε)
+    end
+    for f in (0.5, 0.7, 0.8, 0.85, 0.9, 0.95, 0.99)
+        ε = f * D_min
+        r = kl_robust_allocation(m84, ε)
+        λ_c, v_c = tight_lambda(m84, ε)
+        rel = abs(r.λ - λ_c) / λ_c
+        dv = abs(r.worst_case_growth - v_c)
+        gap = abs(r.worst_case_growth - kl_worst_case(m84, r.a, ε)[1])
+        println("Fix 074a model 84, ε/D_min = ", f, ": λ* = ", r.λ, ", rel(λ) = ", rel, ", |Δv| = ", dv, ", kl_worst_case gap = ", gap, ", ρ = ", r.kkt)
+        @test r.kkt ≤ 1e-10
+        @test abs(Kelly_KL.kl(r.Q, p84) - ε) ≤ 1e-10
+        # coarse guard: the λ search failure this fix addresses was ~1e6 off; λ_c from the conic is noisy at ~1e-6 because the
+        # objective is flat in λ (envelope); λ* accuracy is implied by the two certificates above (slope dD/dlnλ ≈ 0.67 ⇒ ~1.5e-10).
+        @test rel ≤ 1e-4
+        @test dv ≤ 1e-8
+        @test gap ≤ 1e-10
+    end
+
+    # unchanged path: control models; report how often the fallback ran
+    rng = StableRNG(742); cnt = 0; fb0 = Kelly_KL._KL_FALLBACK_COUNT[]
+    while cnt < 20
+        m = rand_correlated_model(rng)
+        m.has_cash || continue
+        Dm = try kl_cash_radius(m)[1] catch e; e isa CertificationError ? continue : rethrow() end
+        (isfinite(Dm) && Dm > 1e-3) || continue
+        cnt += 1
+        r = kl_robust_allocation(m, 0.5 * Dm)
+        @test r.kkt ≤ 1e-10
+    end
+    println("Fix 074a control models: fallback ran on ", Kelly_KL._KL_FALLBACK_COUNT[] - fb0, "/20")
+end
