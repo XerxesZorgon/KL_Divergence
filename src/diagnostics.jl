@@ -11,6 +11,12 @@ function kl(p::AbstractVector{<:Real}, q::AbstractVector{<:Real})
     return sum(p[i] > 0 ? p[i] * log(p[i] / q[i]) : 0.0 for i in eachindex(p))
 end
 
+"""
+    growth_loss(m_true::ScenarioModel, a_belief) -> Float64
+
+Expected log growth lost by betting `a_belief` instead of the log-optimal bet under `m_true`. It takes no `upper` in v0.2 and compares with the
+**uncapped** optimum (ADR-015).
+"""
 function growth_loss(m_true::ScenarioModel, a_belief::AbstractVector{<:Real})
     r = optimal_allocation(m_true)
     return r.growth - growth(m_true, a_belief)
@@ -50,6 +56,12 @@ function logscore_difference(π1::AbstractVector{<:Real}, π2::AbstractVector{<:
     return _mean_se([log(Float64(π1[yi])) - log(Float64(π2[yi])) for yi in y])
 end
 
+"""
+    growth_curve(m::ScenarioModel, a_star, cs) -> Vector{Float64}
+
+Long-run growth rate when the stakes `a_star[2:end]` are scaled by each multiple in `cs` (requires cash). It takes no `upper` in v0.2: the allocation is
+scaled as given and the result may exceed any cap (ADR-015).
+"""
 function growth_curve(m::ScenarioModel, a_star::AbstractVector{<:Real}, cs::AbstractVector{<:Real})
     m.has_cash || throw(ArgumentError("growth_curve requires m.has_cash == true"))
     length(a_star) == size(m.X, 2) || throw(ArgumentError("growth_curve: length(a_star) != size(m.X, 2)"))
@@ -73,6 +85,7 @@ end
 
 Find `c0 > 1` where scaling the Kelly stakes `a_star[2:end]` by `c0` gives zero long-run growth
 `G(c0) = 0`; beyond `c0` wealth tends to 0. Returns `(c0 = c0, c_quad = 2.0)`.
+It takes no `upper` in v0.2 and scales the **uncapped** optimum `a_star` as given (ADR-015).
 """
 function zero_growth_point(m::ScenarioModel, a_star::AbstractVector{<:Real})
     G(c) = growth_curve(m, a_star, [c])[1]
@@ -152,6 +165,7 @@ unless `fixed_stake` is given (then a fixed stake on the first bet asset — the
 ruin when wealth ≤ 0 or falls below `min_stake`; a trial stops at ruin, at `target`, or after `rounds`.
 `drawdown_q` are quantiles of the maximum drawdown from the running peak; `min_fraction` holds each trial's
 lowest wealth as a fraction of `w0` (for the drawdown law, E4).
+It takes no `upper` in v0.2: the allocation `a` is used as given (ADR-015).
 """
 function simulate_ruin(m::ScenarioModel, a; rng, trials::Integer, rounds::Integer, w0 = 1.0, min_stake = 0.0, lot = 0.0,
                        fixed_cost = 0.0, fixed_stake = nothing, target = Inf)

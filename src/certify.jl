@@ -1,3 +1,9 @@
+"""
+    BetResult
+
+A certified allocation. Fields: `a` (stakes, one per asset), `growth` (expected log growth), `kkt` (KKT residual), `method`,
+`active` (indices with a_j > τ_a), `assets` (names) and `upper` (normalized caps used for the certificate, or `nothing`).
+"""
 struct BetResult
     a::Vector{Float64}
     growth::Float64
@@ -46,6 +52,10 @@ end
 Residual ρ, budget multiplier ν*, and the capped (U), zero (Z) and free (F) index sets (DESIGN §10.2, ADR-013).
 Without caps (`upper === nothing` or every entry ≥ 1) ρ is the v0.1 residual and ν* = 1. With a finite cap the minimax
 residual ρ_u is used. If some π_s > 0 has V_s ≤ 0, ρ = Inf and ν* = NaN.
+
+`upper` gives per-asset caps a_j ≤ upper[j] (one entry per column of `X`; `Inf` or any entry ≥ 1 means uncapped; no cap on cash). It is used
+as given: unlike `optimal_allocation` this function does not validate its length. ν* is the common marginal growth of free assets; for a capped
+asset, r_j − ν* ≥ 0 is its shadow price, the growth gained per unit increase of its cap.
 """
 function kkt_components(X::AbstractMatrix{<:Real}, a::AbstractVector{<:Real}, π::AbstractVector{<:Real};
                         τ_a::Real = ACTIVE_TOL, upper = nothing)
@@ -72,6 +82,8 @@ end
     kkt_residual(X, a, π; τ_a = 1e-12, upper = nothing) -> Float64
 
 KKT residual ρ of the allocation `a`. With per-asset caps `upper` (finite entries < 1) it is the generalized residual ρ_u (ADR-013).
+`upper` gives per-asset caps a_j ≤ upper[j] (one entry per column of `X`; `Inf` or any entry ≥ 1 means uncapped; no cap on cash), used as given
+(not validated); `nothing` or all-uncapped caps give the v0.1 residual.
 """
 kkt_residual(X::AbstractMatrix{<:Real}, a::AbstractVector{<:Real}, π::AbstractVector{<:Real}; τ_a::Real = ACTIVE_TOL, upper = nothing) =
     kkt_components(X, a, π; τ_a, upper)[1]

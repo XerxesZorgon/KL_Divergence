@@ -1,3 +1,10 @@
+"""
+    RobustResult
+
+A certified robust allocation. Fields: `a`, `worst_case_growth`, `nominal_growth`, `λ` (multiplier of the ball constraint), `Q` (worst-case
+distribution), `support` (the scenario matrix `Q` lives on), `kkt` (saddle-point residual), `ball`, `ε`, `certificate` and `upper` (normalized
+caps used for the certificate, or `nothing`).
+"""
 struct RobustResult
     a::Vector{Float64}
     worst_case_growth::Float64
@@ -79,7 +86,8 @@ measuring the KL robustness margin of the edge. `radius = 0` means Kelly already
 cash; `radius = Inf` means no `Q` in any KL ball removes every edge, so the KL-robust bet
 never goes to all cash. Projected Newton on the dual; `Inf` is returned only with a proof;
 an undecidable, nearly degenerate model throws `CertificationError`.
-`upper` is validated (ADR-012) but does not change the result: at the all-cash point no bet cap binds (T-BOX-6).
+`upper` gives per-asset caps (one entry per column of `m.X`; `Inf` or any entry ≥ 1 means uncapped; no cap on cash). It is validated (ADR-012)
+but does not change the result: at the all-cash point no bet cap binds (T-BOX-6).
 """
 function kl_cash_radius(m::ScenarioModel; maxit = 2000, tol = 1e-13, upper = nothing)
     m.has_cash || throw(ArgumentError("kl_cash_radius needs a model with cash"))
@@ -138,6 +146,12 @@ function kl_cash_radius_direct(m::ScenarioModel)
     return st in (MOI.OPTIMAL, MOI.ALMOST_OPTIMAL) ? (JuMP.objective_value(model), st) : (Inf, st)
 end
 
+"""
+    kl_robust_conic(m::ScenarioModel, ε; solver = :clarabel, upper = nothing) -> (a, λ)
+
+Joint conic program of ADR-005 (seed for the λ search of `kl_robust_allocation`). `upper` must already be normalized (`Vector{Float64}` or `nothing`):
+per-asset caps a_j ≤ upper[j] are added for every finite entry, and the returned `a` is projected onto the capped simplex.
+"""
 function kl_robust_conic(m::ScenarioModel, ε::Real; solver::Symbol = :clarabel, upper = nothing)
     pos = findall(>(0.0), m.π); p = m.π[pos]; Xp = m.X[pos, :]; S_pos = length(pos); J = size(m.X, 2)
     model = _conic_model(solver)
@@ -170,9 +184,10 @@ end
 The bet maximizing worst-case expected log growth over the KL ball `{Q : D(Q‖π) ≤ ε}`;
 equals the CRRA bet with `γ = 1 + 1/λ*`; all cash exactly when `ε ≥ kl_cash_radius(m)`;
 a model without cash whose `λ* → 0` throws `CertificationError` (v1 limit).
-`upper` gives per-asset caps `a_j ≤ upper[j]` (ADR-012; `Inf` = uncapped). When the caps leave a
-single feasible point (no cash, `|Σu − 1| ≤ 1e-12`) that point is returned with a saddle
-certificate and no boundary check (ADR-016). The all-cash rule is unchanged by caps (ADR-012, T-BOX-6).
+`upper` gives per-asset caps a_j ≤ upper[j] (ADR-012; one entry per column of `m.X`; `Inf` or any entry ≥ 1 means uncapped; no cap on cash); the saddle
+certificate then uses the capped residual ρ_u. When the caps leave a single feasible point (no cash, |Σu − 1| ≤ 1e-12) that point is returned with a
+saddle certificate and no boundary check (ADR-016). The all-cash rule is unchanged by caps (ADR-012, T-BOX-6).
+The λ search runs a safeguarded fallback pass if the primary pass stalls (ADR-005 amendment, Fix 074a). If both passes fail, the primary pass's error is rethrown.
 """
 function kl_robust_allocation(m::ScenarioModel, ε::Real; solver::Symbol = :clarabel, tol = CERT_TOL, upper = nothing)
     (isfinite(ε) && ε ≥ 0.0) || throw(ArgumentError("kl_robust_allocation requires finite ε ≥ 0, got $ε"))
@@ -437,8 +452,8 @@ end
 
 Maximizes worst-case growth when an adversary may move mass (including onto `unseen` scenarios)
 at transport cost `≤ ε`; tied worst cases are certified by a duality gap `≤ gap_tol` instead of
-a KKT residual (ADR-006, exception). `upper` is not supported in v0.2: any value other than
-`nothing` throws `ArgumentError`.
+a KKT residual (ADR-006, exception). `upper` (per-asset caps, as for `optimal_allocation`) is not supported in v0.2: any value other than
+`nothing`, including an all-`Inf` vector, throws `ArgumentError`.
 """
 function wasserstein_robust_allocation(m::ScenarioModel, ε::Real;
                                        unseen = zeros(0, size(m.X, 2)), cost = :l1,

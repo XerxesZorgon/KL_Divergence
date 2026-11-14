@@ -83,6 +83,8 @@ are the v0.1 ones (U = ∅, ν = 1). By the saddle point, all-cash is robust-opt
 the ball makes it log-optimal over A_u, i.e. E_Q[X_j] ≤ 1 for every bet, i.e. ε ≥ D_min. Status:
 **Unverified** until reviewed and covered by T-BOX-6.
 
+**Amendment 2026-11-14 (Task 077):** verified by T-BOX-6 (Tasks 073–074: 100 models; radius bitwise unchanged; all cash at 1.1·D_min, betting at 0.9·D_min).
+
 ## Alternatives Considered
 | Option | Rejected Because |
 |---|---|

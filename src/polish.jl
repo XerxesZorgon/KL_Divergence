@@ -4,6 +4,14 @@ function crra_weights(Xp, πp, a, k)
     return Q, V
 end
 
+"""
+    polish_crra(X, π, a0, k; ..., tol = CERT_TOL, upper = nothing) -> (a, ρ)
+
+Polish a CRRA allocation (k = 1/λ; k = 0 is log-optimal, see `polish_log_optimal`) on its active set by Newton steps and return it with its KKT residual.
+`upper` gives per-asset caps a_j ≤ upper[j] (one entry per column of `X`; `Inf` or any entry ≥ 1 means uncapped; no cap on cash); with a finite cap the
+bordered Newton iteration works on the capped simplex, adds and releases coordinates by the sign of r_j − ν, and the residual is the capped ρ_u.
+`nothing` leaves the uncapped path unchanged.
+"""
 function polish_crra(X, π, a0, k; act_tol = 1e-6, newton_max = 50, outer_max = 10, step_tol = 1e-15, add_tol = 1e-12, tol = CERT_TOL, upper = nothing)
     k ≥ 0 || throw(ArgumentError("k = 1/λ must be ≥ 0"))
     (upper === nothing || all(isinf, upper)) ||

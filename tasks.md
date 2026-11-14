@@ -3694,7 +3694,7 @@ Error: <full output>
 
 ## Task 076: Shared cases with caps; Python wrapper `upper` keyword and dataclass field
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 075
+**Status:** [x] Done (2026-11-14, commit e40161c; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 075
 
 ### What to do
 

@@ -25,6 +25,14 @@ function _simplex_value(a)
     return a_val ./ sum(a_val)
 end
 
+"""
+    solve_conic(m::ScenarioModel; solver = :clarabel, upper = nothing) -> Vector{Float64}
+
+Solve the exponential-cone program for the log-optimal allocation (unpolished, not certified). `upper` gives per-asset caps a_j ≤ upper[j]
+(one entry per column of `m.X`; `Inf` or any entry ≥ 1 means uncapped; no cap on cash); the caps are added as constraints and the result is projected
+onto the capped simplex. Without cash and with |Σ u_j − 1| ≤ 1e-12 the feasible set is a single point and an `ArgumentError` directs the caller to
+`optimal_allocation` (ADR-016).
+"""
 function solve_conic(m::ScenarioModel; solver::Symbol = :clarabel, upper = nothing)
     u = _normalize_upper(m, upper)
     if u !== nothing && !m.has_cash && abs(sum(u) - 1) ≤ BOX_FEAS_TOL

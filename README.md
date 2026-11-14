@@ -89,6 +89,96 @@ on the reference machine (`KELLY_KL_REFERENCE_HOST=1`), within relative 1e-12 el
 not compared). References were generated on Julia 1.12.1, Windows 11, with the pinned `Manifest.toml`; regenerating them
 (`experiments/update_reference.jl`, reference machine only) is a reviewed change of its own.
 
+## Per-asset caps (v0.2)
+`optimal_allocation`, `kl_robust_allocation`, `kl_cash_radius` and the building blocks (`kkt_residual`, `kkt_components`,
+`solve_conic`, `polish_crra`) take `upper`: one cap per column of the payoff matrix, `a_j ≤ upper[j]`. `Inf` (or any entry ≥ 1)
+means uncapped; there is no cap on cash. The result is certified by the capped residual ρ_u (ADR-012, ADR-013), and
+`result.upper` stores the caps that were used. `kkt_components` returns `(ρ, ν*, U, Z, F)`: ν* is the common marginal growth of
+the free assets, and for a capped asset r_j − ν* ≥ 0 is its **shadow price**, the growth gained per unit increase of its cap.
+
+**(a) One bet, capped at 10% (T-BOX-1).** Kelly alone would stake 0.2.
+
+```julia
+using Kelly_KL
+m = ScenarioModel([0.6, 0.4], [1.0 2.0; 1.0 0.0]; assets = ["cash", "bet"], has_cash = true, structure = :single_event)
+r = optimal_allocation(m; upper = [Inf, 0.1])
+ρ, ν, U, Z, F = kkt_components(m.X, r.a, m.π; upper = r.upper)
+r_bet = (m.X' * (m.π ./ (m.X * r.a)))[2]
+println("a = ", r.a); println("method = ", r.method); println("kkt = ", r.kkt)
+println("nu* = ", ν, ", r_bet = ", r_bet, ", shadow price = ", r_bet - ν)
+```
+```
+a = [0.9, 0.1]
+method = clarabel
+kkt = 0.0
+nu* = 0.9898989898989898, r_bet = 1.0909090909090908, shadow price = 0.101010101010101
+```
+The stake is the cap, ν* = 98/99 and r_bet = 12/11, with kkt ≤ 1e-10. The shadow price r_bet − ν* ≈ 0.101 means raising the cap
+by 0.01 adds about 0.001 to expected log growth.
+
+**(b) Order-book depth.** One binary contract that resolves YES with your belief p = 0.6; no fees, for clarity. The asks form
+three assets, each returning 1/price per dollar on YES and 0 on NO: level 1 at 0.50 (at most 5% of bankroll), level 2 at 0.53
+(at most 10%), level 3 at 0.56 (uncapped).
+
+```julia
+using Kelly_KL
+prices = [0.50, 0.53, 0.56]
+X = [1.0 1/prices[1] 1/prices[2] 1/prices[3]; 1.0 0.0 0.0 0.0]          # rows: YES, NO
+m = ScenarioModel([0.6, 0.4], X; assets = ["cash", "ask 0.50", "ask 0.53", "ask 0.56"], has_cash = true, structure = :correlated)
+r = optimal_allocation(m; upper = [Inf, 0.05, 0.10, Inf])
+ρ, ν, U, Z, F = kkt_components(m.X, r.a, m.π; upper = r.upper)
+rv = m.X' * (m.π ./ (m.X * r.a))
+println("allocation = ", round.(r.a; digits = 6), "  kkt = ", r.kkt, "  capped = ", U, "  nu* = ", ν)
+for j in 2:4; println(m.assets[j], ": stake ", round(r.a[j]; digits = 6), ", shadow price r_j - nu* = ", round(rv[j] - ν; digits = 6)); end
+```
+```
+allocation = [0.853617, 0.05, 0.096383, 0.0]  kkt = 1.6653345369377348e-16  capped = [2]  nu* = 0.9970089730807576
+ask 0.50: stake 0.05, shadow price r_j - nu* = 0.059821
+ask 0.53: stake 0.096383, shadow price r_j - nu* = 0.0
+ask 0.56: stake 0.0, shadow price r_j - nu* = -0.053411
+```
+Level 1, the cheapest, is exhausted first: its cap binds and its shadow price (0.0598) is what an extra unit of depth at 0.50 would
+be worth. The bet goes into level 2 (9.6% of bankroll, below its cap) and stops there; level 3 stays at zero because its edge
+is below the marginal growth ν*.
+
+**(c) Exit.** You hold 100 YES contracts bought earlier, the bid is 0.55 and cash is $945, so wealth at liquidation value is
+W0 = 945 + 100·0.55 = 1000. Assets: cash; "hold" (pays 1/0.55 per dollar on YES, capped at 100·0.55/1000 = 0.055, since you
+cannot keep more than you own); and "buy" at the 0.57 ask, uncapped.
+
+```julia
+using Kelly_KL
+function exit_model(p)
+    X = [1.0 1/0.55 1/0.57; 1.0 0.0 0.0]                                  # rows: YES, NO
+    ScenarioModel([p, 1 - p], X; assets = ["cash", "hold", "buy"], has_cash = true, structure = :correlated)
+end
+for p in (0.50, 0.62)
+    r = optimal_allocation(exit_model(p); upper = [Inf, 100 * 0.55 / 1000, Inf])
+    println("p = ", p, ": allocation = ", round.(r.a; digits = 6), " kkt = ", r.kkt, "  hold \$ = ", round(1000 * r.a[2]; digits = 2), ", buy \$ = ", round(1000 * r.a[3]; digits = 2))
+end
+```
+```
+p = 0.5: allocation = [1.0, 0.0, 0.0] kkt = 0.0  hold $ = 0.0, buy $ = 0.0
+p = 0.62: allocation = [0.885488, 0.055, 0.059512] kkt = 5.551115123125783e-17  hold $ = 55.0, buy $ = 59.51
+```
+At p = 0.50 the belief is below the bid, so the hold stake is 0: sell everything. At p = 0.62 the whole position is kept (the cap on
+"hold" binds) and about $59.5 more is bought at the ask. Exits fall out of re-optimizing the portfolio under the cap on what you
+hold, with no separate exit rule.
+
+**(d) Python.**
+
+```python
+import numpy as np, kelly_kl as kk
+m = kk.ScenarioModel(np.array([0.6, 0.4]), np.array([[1.0, 2.0], [1.0, 0.0]]), ("cash", "bet"), True, "single_event")
+r = kk.optimal_allocation(m, upper=[np.inf, 0.1]); print(r.a, r.method)   # [0.9 0.1] clarabel
+```
+
+**(e) Limits.** `wasserstein_robust_allocation` rejects caps in v0.2 (`ArgumentError`, `ValueError` in Python). The diagnostics
+(`growth_loss`, `growth_curve`, `zero_growth_point`, `simulate_ruin`) take no `upper`: they use the uncapped optimum or the
+allocation as given (ADR-015). With no cash and |Σu − 1| ≤ 1e-12 the feasible set is a single point and
+`optimal_allocation` returns it with `method = :single_point` (ADR-016). Fees: fold a per-contract fee into the effective price
+(cost per contract = price + fee), which keeps the problem linear. Kalshi rounds fees per order, so compute the exact order fee
+after rounding to whole contracts.
+
 ## Running tests
 ```bash
 julia --project=. -e "using Pkg; Pkg.test()"     # full suite (includes 50 000-trial E1 stress test)
