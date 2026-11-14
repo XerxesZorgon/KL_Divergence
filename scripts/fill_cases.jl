@@ -50,6 +50,17 @@ const CASES = [
     Dict("id" => "diag_kl_worst_case", "kind" => "diagnostic", "inputs" => Dict("function" => "kl_worst_case", "model" => TWO_BETS, "args" => [0.01])),
     Dict("id" => "diag_wasserstein_worst_case", "kind" => "diagnostic",
          "inputs" => Dict("function" => "wasserstein_worst_case", "model" => E7_MODEL, "args" => [0.0125], "unseen" => CRASH, "cost" => "l1")),
+    # Capped cases (Task 076, T-BOX-13). `Inf` = uncapped (TOML `inf`; read back as Inf by Julia's TOML and Python's tomllib).
+    Dict("id" => "capped_two_bets", "kind" => "allocation", "inputs" => Dict("model" => TWO_BETS, "upper" => [Inf, 0.03, Inf])),
+    # uncapped E7 optimum is [0, 0, 1] (asset A unheld), so the binding cap goes on B: half of its stake 1.0
+    Dict("id" => "capped_e7_model", "kind" => "allocation", "inputs" => Dict("model" => E7_MODEL, "upper" => [Inf, Inf, 0.5])),
+    # uncapped KL-robust stake on bet 1 at ε = 0.01 is 0.0259062; c = round(0.0259062 / 2, digits = 4)
+    Dict("id" => "capped_kl_two_bets", "kind" => "kl", "inputs" => Dict("model" => TWO_BETS, "eps" => 0.01, "upper" => [Inf, 0.013, Inf])),
+    Dict("id" => "capped_single_point", "kind" => "allocation",
+         "inputs" => Dict("model" => Dict("type" => "scenario", "pi" => [0.5, 0.3, 0.2],
+                                          "X" => [[3.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 6.0]],
+                                          "assets" => ["b1", "b2", "b3"], "has_cash" => false, "structure" => "correlated"),
+                          "upper" => [0.2, 0.3, 0.5])),
 ]
 
 function main(; out = joinpath(@__DIR__, "..", "test", "cases", "cases.toml"))

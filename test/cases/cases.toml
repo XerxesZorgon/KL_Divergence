@@ -396,3 +396,77 @@ tol = 1.0e-10
         pi = [0.25, 0.3, 0.25, 0.2]
         structure = "correlated"
         type = "scenario"
+[[case]]
+id = "capped_two_bets"
+kind = "allocation"
+tol = 1.0e-10
+
+    [case.expected]
+    a = [0.8699007365961097, 0.03, 0.10009926340389029]
+    growth = 0.026827078609893272
+
+    [case.inputs]
+    upper = [+inf, 0.03, +inf]
+
+        [case.inputs.model]
+        cash = true
+        p = [0.3, 0.25]
+        type = "simultaneous"
+        w = [4.0, 6.0]
+[[case]]
+id = "capped_e7_model"
+kind = "allocation"
+tol = 1.0e-10
+
+    [case.expected]
+    a = [0.45284403610319734, 0.04715596389680266, 0.5]
+    growth = 0.009537636320226306
+
+    [case.inputs]
+    upper = [+inf, +inf, 0.5]
+
+        [case.inputs.model]
+        X = [[1.0, 1.4, 1.25], [1.0, 1.1, 1.05], [1.0, 0.9, 0.95], [1.0, 0.6, 0.8]]
+        assets = ["cash", "A", "B"]
+        has_cash = true
+        pi = [0.25, 0.3, 0.25, 0.2]
+        structure = "correlated"
+        type = "scenario"
+[[case]]
+id = "capped_kl_two_bets"
+kind = "kl"
+tol = 1.0e-10
+
+    [case.expected]
+    a = [0.9551131300305188, 0.013, 0.03188686996948121]
+    lambda = 0.5451651617963725
+    worst_case_growth = 0.0037600064999004854
+
+    [case.inputs]
+    eps = 0.01
+    upper = [+inf, 0.013, +inf]
+
+        [case.inputs.model]
+        cash = true
+        p = [0.3, 0.25]
+        type = "simultaneous"
+        w = [4.0, 6.0]
+[[case]]
+id = "capped_single_point"
+kind = "allocation"
+tol = 1.0e-10
+
+    [case.expected]
+    a = [0.2, 0.3, 0.5]
+    growth = 0.019006112888813098
+
+    [case.inputs]
+    upper = [0.2, 0.3, 0.5]
+
+        [case.inputs.model]
+        X = [[3.0, 0.0, 0.0], [0.0, 4.0, 0.0], [0.0, 0.0, 6.0]]
+        assets = ["b1", "b2", "b3"]
+        has_cash = false
+        pi = [0.5, 0.3, 0.2]
+        structure = "correlated"
+        type = "scenario"

@@ -18,10 +18,12 @@ end
 function run_case(c::AbstractDict)
     kind = c["kind"]; inp = c["inputs"]
     if kind == "allocation"
-        r = optimal_allocation(build_model(inp["model"]))
+        m = build_model(inp["model"])
+        r = haskey(inp, "upper") ? optimal_allocation(m; upper = _v(inp["upper"])) : optimal_allocation(m)
         return Dict{String,Any}("a" => r.a, "growth" => r.growth)
     elseif kind == "kl"
-        r = kl_robust_allocation(build_model(inp["model"]), Float64(inp["eps"]))
+        m = build_model(inp["model"])
+        r = haskey(inp, "upper") ? kl_robust_allocation(m, Float64(inp["eps"]); upper = _v(inp["upper"])) : kl_robust_allocation(m, Float64(inp["eps"]))
         return Dict{String,Any}("a" => r.a, "worst_case_growth" => r.worst_case_growth, "lambda" => r.λ)
     elseif kind == "wasserstein"
         m = build_model(inp["model"]); J = size(m.X, 2)

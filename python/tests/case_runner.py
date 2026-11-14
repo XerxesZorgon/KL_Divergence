@@ -23,10 +23,12 @@ def build_model(d):
 def run_case(c):
     kind, inp = c["kind"], c["inputs"]
     if kind == "allocation":
-        r = kk.optimal_allocation(build_model(inp["model"]))
+        m = build_model(inp["model"])
+        r = kk.optimal_allocation(m, upper=inp["upper"]) if "upper" in inp else kk.optimal_allocation(m)
         return {"a": r.a, "growth": r.growth}
     if kind == "kl":
-        r = kk.kl_robust_allocation(build_model(inp["model"]), inp["eps"])
+        m = build_model(inp["model"])
+        r = kk.kl_robust_allocation(m, inp["eps"], upper=inp["upper"]) if "upper" in inp else kk.kl_robust_allocation(m, inp["eps"])
         return {"a": r.a, "worst_case_growth": r.worst_case_growth, "lambda": r.λ}
     if kind == "wasserstein":
         m = build_model(inp["model"])

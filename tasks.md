@@ -3668,7 +3668,7 @@ Error: <full output>
 
 ## Task 075: Wasserstein rejects caps
 
-**Status:** [ ] Pending **Milestone:** M9 **Depends on:** Task 074
+**Status:** [x] Done (2026-11-14, commit 360c0af; Agent: Claude Code 2.1.228) **Milestone:** M9 **Depends on:** Task 074
 
 ### What to do
 

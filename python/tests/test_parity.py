@@ -46,3 +46,21 @@ def test_wrapper_covers_public_api():
     exported = {str(s) for s in jl.names(jl.Kelly_KL)} - {"Kelly_KL"}
     missing = sorted(n for n in exported if not hasattr(kk, n))
     assert not missing, f"Julia exports without a Python wrapper: {missing}"
+
+
+def test_caps_api():                                                # T-BOX-13, T-PY-2 style
+    m = kk.simultaneous_bets([0.3, 0.25], [4.0, 6.0])
+    with pytest.raises(ValueError):
+        kk.optimal_allocation(m, upper=[0.5, np.inf, np.inf])        # cap on cash
+    with pytest.raises(ValueError):
+        kk.optimal_allocation(m, upper=[0.5])                        # wrong length
+    with pytest.raises(ValueError):
+        kk.wasserstein_robust_allocation(m, 0.1, upper=[np.inf] * 3)
+    r0, r1 = kk.optimal_allocation(m), kk.optimal_allocation(m, upper=None)
+    assert np.array_equal(r0.a, r1.a) and r0.upper is None and r1.upper is None
+    # T-BOX-12 model: caps sum to 1, no cash, so the only feasible point is a = u
+    m12 = kk.ScenarioModel(np.array([0.5, 0.3, 0.2]), np.diag([3.0, 4.0, 6.0]), ("b1", "b2", "b3"), False, "correlated")
+    u = np.array([0.2, 0.3, 0.5])
+    rho, nu, U, Z, F = kk.kkt_components(m12.X, u, m12.pi, upper=u)
+    assert U == (1, 2, 3) and Z == () and F == ()
+    assert rho == 0.0 and abs(nu - 0.4) <= 1e-15

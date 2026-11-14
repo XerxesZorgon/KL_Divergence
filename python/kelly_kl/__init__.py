@@ -9,6 +9,9 @@ Conventions that follow Julia, not Python:
     `seed` and use `StableRNG(seed)`, so a Python call reproduces the Julia call `rng = StableRNG(seed)`;
   * `sampled_payoffs` samplers are `(name, *params)` tuples naming a Distributions.jl distribution,
     e.g. `("Uniform", 1.8, 2.2)`.
+  * `upper` (optional, on `kkt_residual`, `optimal_allocation`, `kl_cash_radius`, `kl_robust_allocation`) gives per-asset
+    caps a_j <= upper[j]: `np.inf` means uncapped, there are no caps on cash, and `None` (default) means no caps;
+    `wasserstein_robust_allocation` accepts the keyword but rejects any caps with `ValueError`.
 
 The first import starts Julia (and on first use installs the Julia environment); expect a delay.
 """
@@ -26,7 +29,7 @@ _K = jl.Kelly_KL
 __all__ = [
     "ScenarioModel", "BetResult", "RobustResult", "CertificationError", "SolverError", "julia_version",
     "single_event", "simultaneous_bets", "correlated_bets", "payoffs_from_odds", "growth",
-    "kkt_residual", "certify", "optimal_allocation",
+    "kkt_residual", "kkt_components", "certify", "optimal_allocation",
     "beta_predictive", "dirichlet_predictive", "predictive_from_draws", "sampled_payoffs", "growth_se", "mixture",
     "bma_weights",
     "kl", "growth_loss", "holdout_logscore", "logscore_difference", "growth_curve", "zero_growth_point",
@@ -89,6 +92,14 @@ def _mat(x) -> Any:
     return jl.Matrix[jl.Float64](a)
 
 
+def _upper(u) -> Any:
+    return jl.nothing if u is None else _vec(u)         # `_vec` keeps np.inf (uncapped)
+
+
+def _up(upper) -> dict:
+    return {} if upper is None else {"upper": _upper(upper)}     # absent keyword: the Julia call is unchanged
+
+
 def _sym(s: str) -> Any:
     return jl.Symbol(s)
 
@@ -124,11 +135,13 @@ class BetResult:
     method: str
     active: tuple          # 1-based asset indices, as in Julia
     assets: tuple
+    upper: np.ndarray | None = None
 
 
 def _bet(r) -> BetResult:
     return BetResult(_arr(r.a), float(r.growth), float(r.kkt), str(r.method), tuple(int(i) for i in r.active),
-                     tuple(str(s) for s in r.assets))
+                     tuple(str(s) for s in r.assets),
+                     None if r.upper is None else _arr(r.upper))
 
 
 @dataclass(frozen=True)
@@ -143,11 +156,13 @@ class RobustResult:
     ball: str
     ε: float
     certificate: str
+    upper: np.ndarray | None = None
 
 
 def _robust(r) -> RobustResult:
     return RobustResult(_arr(r.a), float(r.worst_case_growth), float(r.nominal_growth), float(r.λ), _arr(r.Q),
-                        _arr(r.support), float(r.kkt), str(r.ball), float(r.ε), str(r.certificate))
+                        _arr(r.support), float(r.kkt), str(r.ball), float(r.ε), str(r.certificate),
+                        None if r.upper is None else _arr(r.upper))
 
 
 def _m(m):
@@ -182,8 +197,14 @@ def growth(m: ScenarioModel, a) -> float:
 
 
 # Certification and optimization
-def kkt_residual(X, a, pi) -> float:
-    return float(_call(_K.kkt_residual, _mat(X), _vec(a), _vec(pi)))
+def kkt_residual(X, a, pi, upper=None) -> float:
+    return float(_call(_K.kkt_residual, _mat(X), _vec(a), _vec(pi), **_up(upper)))
+
+
+def kkt_components(X, a, pi, upper=None) -> tuple:
+    """(rho, nu_star, U, Z, F): minimax KKT residual, multiplier, and the capped, zero and free sets (1-based)."""
+    rho, nu, U, Z, F = _call(_K.kkt_components, _mat(X), _vec(a), _vec(pi), **_up(upper))
+    return float(rho), float(nu), tuple(int(i) for i in U), tuple(int(i) for i in Z), tuple(int(i) for i in F)
 
 
 def certify(result: BetResult, tol: float = 1e-10) -> BetResult:
@@ -192,8 +213,10 @@ def certify(result: BetResult, tol: float = 1e-10) -> BetResult:
     raise CertificationError(result.kkt, tol, result.method, "uncertified bet")
 
 
-def optimal_allocation(m: ScenarioModel, method: str = "auto", solver: str = "clarabel", tol: float = 1e-10) -> BetResult:
-    return _bet(_call(_K.optimal_allocation, _m(m), method=_sym(method), solver=_sym(solver), tol=float(tol)))
+def optimal_allocation(m: ScenarioModel, method: str = "auto", solver: str = "clarabel", tol: float = 1e-10,
+                       upper=None) -> BetResult:
+    return _bet(_call(_K.optimal_allocation, _m(m), method=_sym(method), solver=_sym(solver), tol=float(tol),
+                      **_up(upper)))
 
 
 # Uncertainty and model averaging
@@ -299,13 +322,14 @@ def kl_inner_direct(m: ScenarioModel, a, eps: float) -> tuple:
     return float(v), _arr(Q)
 
 
-def kl_cash_radius(m: ScenarioModel) -> tuple:
-    d, Q = _call(_K.kl_cash_radius, _m(m))
+def kl_cash_radius(m: ScenarioModel, upper=None) -> tuple:
+    d, Q = _call(_K.kl_cash_radius, _m(m), **_up(upper))
     return float(d), _arr(Q)
 
 
-def kl_robust_allocation(m: ScenarioModel, eps: float, solver: str = "clarabel", tol: float = 1e-10) -> RobustResult:
-    return _robust(_call(_K.kl_robust_allocation, _m(m), float(eps), solver=_sym(solver), tol=float(tol)))
+def kl_robust_allocation(m: ScenarioModel, eps: float, solver: str = "clarabel", tol: float = 1e-10,
+                         upper=None) -> RobustResult:
+    return _robust(_call(_K.kl_robust_allocation, _m(m), float(eps), solver=_sym(solver), tol=float(tol), **_up(upper)))
 
 
 def _cost(cost):
@@ -319,11 +343,11 @@ def wasserstein_worst_case(m: ScenarioModel, a, eps: float, unseen=None, cost="l
 
 
 def wasserstein_robust_allocation(m: ScenarioModel, eps: float, unseen=None, cost="l1", solver: str = "clarabel",
-                                  tol: float = 1e-10, gap_tol: float = 1e-7) -> RobustResult:
+                                  tol: float = 1e-10, gap_tol: float = 1e-7, upper=None) -> RobustResult:
     J = np.asarray(m.X).shape[1] if isinstance(m, ScenarioModel) else None
     U = _mat(np.zeros((0, J))) if unseen is None else _mat(unseen)
     return _robust(_call(_K.wasserstein_robust_allocation, _m(m), float(eps), unseen=U, cost=_cost(cost),
-                         solver=_sym(solver), tol=float(tol), gap_tol=float(gap_tol)))
+                         solver=_sym(solver), tol=float(tol), gap_tol=float(gap_tol), **_up(upper)))
 
 
 def kl_radius_chi2(K: int, n: int, level: float = 0.95) -> float:
